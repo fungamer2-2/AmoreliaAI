@@ -3,7 +3,6 @@ import time
 import re
 from collections import deque
 from datetime import datetime
-
 from llm import MistralLLM
 
 NEG_EMOTION_MULT = 1.5
@@ -92,8 +91,8 @@ Emotions related to event consequences:
 		- **Joy**: If the event is desirable for you
 		- **Distress**: If the event is undesirable for you
 - If the event receiver was someone else:
-	- **HappyFor**: If the event is presumed to be desirable for someone else 
-	- **Pity**: If the event is presumed to be undesirable for someone else
+	- **HappyFor**: If the event is presumed to be desirable for someone else (and you are pleased about it) 
+	- **Pity**: If the event is presumed to be undesirable for someone else (and you are displeased about it)
 	
 Emotions related to agent actions:
 - If the event performer was you (the AI):
@@ -475,6 +474,7 @@ class ThoughtSystem:
 			print(f"- {thought}")
 		print()
 		print(f"Emotion: {data['emotion']}, intensity {intensity}/10")
+		print(f"Emotion reason: {data['emotion_reason']}")
 		return data
 		
 
@@ -669,11 +669,10 @@ class AISystem:
 		)
 		response = self.model.generate(
 			history,
-			temperature=1.0
+			temperature=0.8
 		)
 		
 		self.tick()
-		
 		self.buffer.add_message("assistant", response)		
 		return response
 
