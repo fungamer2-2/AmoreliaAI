@@ -10,3 +10,7 @@ Before responding, the AI is prompted to generate a list of thoughts from its pe
 ## Emotion system
 
 The emotion system is based on the PAD (Pleasure-Arousal-Dominance) state model, and its current emotions may affect its responses.
+
+## Coming soon
+
+I also plan to implement a long-term memory system to recall relevant memories from previous conversations. That way, it'll be a true companion that actually remembers you across sessions.
