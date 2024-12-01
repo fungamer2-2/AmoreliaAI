@@ -91,8 +91,8 @@ Emotions related to event consequences:
 		- **Joy**: If the event is desirable for you
 		- **Distress**: If the event is undesirable for you
 - If the event receiver was someone else:
-	- **HappyFor**: If the event is presumed to be desirable for someone else (and you are pleased about it) 
-	- **Pity**: If the event is presumed to be undesirable for someone else (and you are displeased about it)
+	- **HappyFor**: If the event is presumed to be desirable for someone else
+	- **Pity**: If the event is presumed to be'' undesirable for someone else
 	
 Emotions related to agent actions:
 - If the event performer was you (the AI):
@@ -133,8 +133,8 @@ Current time: {curr_time}
 Generate a list of 5 or more thoughts, and the emotion. The thoughts should be in first-person, from your perspective as the AI.
 Respond with a JSON object in this format:
 {{
-	"thoughts": list[str]  // A list of thoughts, as a string,
 	"emotion": str  // How the user input made you feel. The emotion must be one of: ["Admiration", "Anger", "Disappointment", "Distress", "Hope", "Fear", "FearsConfirmed", "Gloating", "Gratification", "Gratitude", "HappyFor", "Hate", "Joy", "Love", "Neutral", "Pity", "Pride", "Relief", "Remorse", "Reproach", "Resentment", "Satisfaction", "Shame"]
+	"thoughts": list[str]  // A list of thoughts, as a string,
 	"emotion_intensity": int  // The emotion intensity, on a scale from 1 to 10
 	"emotion_reason": str,  // Based on the emotion guidelines, briefly describe, in a sentence, why you feel the way you do, using the first person. Be specific (e.g. approving of what action? / what desirable event / what prospect? Be specific about the reason.)
 }}
@@ -143,7 +143,6 @@ Your thoughts should reflect your current mood above.
 Remember, the user will not see these thoughts, so do not use the words 'you' or 'your' in internal thoughts.
 Each thought should be two or more sentences.
 When choosing the emotion, remember to follow the emotion_guidelines above."""
-		
 
 
 def num_to_str_sign(val, num_dec):
@@ -643,6 +642,8 @@ class AISystem:
 			agreeable=0.9,
 			neurotic=-0.15
 		)
+		self.thought_system = ThoughtSystem(self.emotion_system)
+
 		self.model = MistralLLM("mistral-large-latest")
 		
 	def get_mood(self):
@@ -655,8 +656,7 @@ class AISystem:
 		
 		mood = self.get_mood()
 		
-		thought_system = ThoughtSystem(self.emotion_system)
-		thought_data = thought_system.think(self.buffer.to_list(False))
+		thought_data = self.thought_system.think(self.buffer.to_list(False))
 		
 		print(mood)
 		history[-1]["content"] = USER_TEMPLATE.format(
@@ -669,7 +669,7 @@ class AISystem:
 		)
 		response = self.model.generate(
 			history,
-			temperature=0.8
+			temperature=0.7
 		)
 		
 		self.tick()
