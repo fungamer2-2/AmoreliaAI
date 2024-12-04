@@ -70,10 +70,6 @@ def mistral_embed_texts(inputs):
 	
 	embed_res = response.json()
 	return [obj["embedding"] for obj in embed_res["data"]]
-	
-
-print(mistral_embed_texts(["Hello world"]))
-
 
 	
 class MistralLLM:
