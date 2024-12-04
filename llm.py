@@ -5,7 +5,8 @@ from dotenv import load_dotenv
 
 load_dotenv(".env")
 
-MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions"
+MISTRAL_API_CHAT_URL = "https://api.mistral.ai/v1/chat/completions"
+MISTRAL_API_EMBED_URL = "https://api.mistral.ai/v1/embeddings"
 
 
 def mistral_request(messages, model, **kwargs):
@@ -22,12 +23,12 @@ def mistral_request(messages, model, **kwargs):
 	}
 	
 	for tries in range(5):
-		response = requests.post(MISTRAL_API_URL, json=data, headers=headers)
+		response = requests.post(MISTRAL_API_CHAT_URL, json=data, headers=headers)
 		if response.ok:
 			break
 		elif response.status_code == 429:
 			wait_time = 2 ** tries
-			print(f"Waiting {wait_time} second(s)...")
+			#print(f"Waiting {wait_time} second(s)...")
 			time.sleep(wait_time)
 		else:
 			print(response.text)
@@ -38,6 +39,41 @@ def mistral_request(messages, model, **kwargs):
 	
 	
 	return response.json()
+	
+def mistral_embed_texts(inputs):
+	api_key = os.getenv("MISTRAL_API_KEY")
+	headers = {
+		"Accept": "application/json",
+		"Authorization": f"Bearer {api_key}",
+		"Content-Type": "application/json"
+	}
+	data = {
+		"model": "mistral-embed",
+		"input": inputs
+	}
+	
+	for tries in range(4):
+		response = requests.post(MISTRAL_API_EMBED_URL, json=data, headers=headers)
+		if response.ok:
+			break
+		elif response.status_code == 429:
+			wait_time = 2 ** tries
+			#print(f"Waiting {wait_time} second(s)...")
+			time.sleep(wait_time)
+		else:
+			print(response.text)
+			response.raise_for_status()
+	else:
+		print(response.text)
+		response.raise_for_status()
+	
+	
+	embed_res = response.json()
+	return [obj["embedding"] for obj in embed_res["data"]]
+	
+
+print(mistral_embed_texts(["Hello world"]))
+
 
 	
 class MistralLLM:
