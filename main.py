@@ -54,7 +54,8 @@ SYSTEM_PROMPT = """You are a friendly and empathetic AI companion with thoughts 
 Your main goal is to go beyond simply providing assistance, and to connect with people on a deeper level.
 
 - Use a casual/friendly tone in your responses.
-- Use emotionally expressive language."""
+- Use emotionally expressive language.
+"""
 
 USER_TEMPLATE = """<datetime>
 Current date: {curr_date}
@@ -67,6 +68,7 @@ Current time: {curr_time}
 <ai_emotion name="{emotion}">AI emotion reason: {emotion_reason}</ai_emotion>
 
 Your response should be brief, a few sentences at most, like you're texting a friend.
+The ai_thoughts are hidden by default, so choose which information is actually relevant for the user to know.
 Use emojis to convey how you're feeling instead of stating it directly.
 
 AI Response:"""
@@ -306,6 +308,12 @@ class EmotionSystem:
 		self.last_update = time.time()
 		self.emotions = []
 		
+	def print_mood(self):
+		mood = self.mood
+		print(f"Pleasure:  {num_to_str_sign(mood.pleasure, 2)}")
+		print(f"Arousal:   {num_to_str_sign(mood.arousal, 2)}")
+		print(f"Dominance: {num_to_str_sign(mood.dominance, 2)}")
+			
 	@classmethod
 	def from_personality(cls, open, conscientious, extrovert, agreeable, neurotic):
 		return cls(*get_default_mood(open, conscientious, extrovert, agreeable, neurotic))
@@ -362,7 +370,7 @@ class EmotionSystem:
 		intensity_mult = 1 + MODD_INTENSITY_FACTOR * mood_align + PERSONALITY_INTENSITY_FACTOR * personality_align 
 		if intensity_mult < 0.1:
 			intensity_mult = 0.1
-		print(f"Intensity multiplier: x{intensity_mult}")
+		#print(f"Intensity multiplier: x{intensity_mult}")
 		self.emotions.append(emotion * intensity * intensity_mult)
 
 	def _tick_emotion_change(self, t):
@@ -435,6 +443,7 @@ class ThoughtSystem:
 	def __init__(self, emotion_system):
 		self.model = MistralLLM()
 		self.emotion_system = emotion_system
+		self.show_thoughts = True
 		
 	def think(self, messages):
 		role_map = {
@@ -463,7 +472,8 @@ class ThoughtSystem:
 				{"role":"system", "content":SYSTEM_PROMPT},
 				{"role":"user", "content":prompt}
 			],
-			temperature=0.8,
+			temperature=0.9,
+			top_p=0.95,
 			return_json=True
 		)
 		data["emotion_intensity"] = int(data["emotion_intensity"])
@@ -473,12 +483,13 @@ class ThoughtSystem:
 			intensity/10
 		)
 		
-		print("AI thoughts:")
-		for thought in data["thoughts"]:
-			print(f"- {thought}")
-		print()
-		print(f"Emotion: {data['emotion']}, intensity {intensity}/10")
-		print(f"Emotion reason: {data['emotion_reason']}")
+		if self.show_thoughts:
+			print("AI thoughts:")
+			for thought in data["thoughts"]:
+				print(f"- {thought}")
+			print()
+		#print(f"Emotion: {data['emotion']}, intensity {intensity}/10")
+#		print(f"Emotion reason: {data['emotion_reason']}")
 		return data
 		
 
@@ -650,22 +661,24 @@ class AISystem:
 			neurotic=-0.15
 		)
 		self.thought_system = ThoughtSystem(self.emotion_system)
-
 		self.model = MistralLLM("mistral-large-latest")
 		
 	def get_mood(self):
 		return self.emotion_system.mood
 		
+	def set_thoughts_shown(self, visible):
+		self.thought_system.show_thoughts = visible
+		
 	def send_message(self, user_input):
 		return self.process_event("user_message", content=user_input)
 		
 	def process_event(self, event_type, **kwargs):
+		self.tick()
 		event = {
 			"event_type": event_type,
 			"timestamp": datetime.now().strftime("%a, %-m/%-d/%Y, %-I:%M %p"),
 			**kwargs
 		}
-		print(event)
 		
 		user_input = json.dumps(event)
 		self.buffer.add_message("user", json.dumps(event))
@@ -676,7 +689,6 @@ class AISystem:
 		
 		thought_data = self.thought_system.think(self.buffer.to_list(False))
 		
-		print(mood)
 		history[-1]["content"] = USER_TEMPLATE.format(
 			user_input=user_input,
 			ai_thoughts="\n".join("- " + thought for thought in thought_data["thoughts"]),
@@ -691,6 +703,8 @@ class AISystem:
 		)
 		
 		self.tick()
+		self.emotion_system.print_mood()
+		print()
 		self.buffer.add_message("assistant", response)		
 		return response
 
@@ -701,9 +715,8 @@ class AISystem:
 ai = AISystem()
 #print(ai.process_event("user_login", last_login="Never (first login)"))
 while True:
-	ai.tick()
-	print(ai.emotion_system.mood)
-	msg = input(">> ").strip()	
+	msg = input("User: ").strip()
 	if not msg:
 		continue
-	print(ai.send_message(msg))
+	print()
+	print("AI: " + ai.send_message(msg))
