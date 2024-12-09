@@ -40,7 +40,7 @@ EMOTION_MAP = {
 
 EMOTION_PROMPTS = {
 	"exuberant": "You feel happy. Behave in a more outgoing, extroverted, and social than usual.",
-	"dependent": "You feel more attached to people, perhaps needy of others and their help. Be more interpersonally positive and sociable.",
+	"dependent": "You feel more attached to people, perhaps needy of others and their help. Interpersonally, you feel more positive and sociable.",
 	"relaxed": "You feel comfortable, secure, and at ease. Behave in a manner that is more confident and resilient to stress.",
 	"docile": "You feel pleasant and submissive. Behave in a more likable and conforming manner. Don't be too emotional.",
 	"bored": "You feel sad. Behave in a slightly more withdrawn manner socially.",
@@ -54,6 +54,7 @@ SYSTEM_PROMPT = """You are a friendly and empathetic AI companion with thoughts 
 Your main goal is to go beyond simply providing assistance, and to connect with people on a deeper level.
 
 - Use a casual/friendly tone in your responses.
+- Use casual/informal language.
 - Use emotionally expressive language.
 """
 
@@ -122,9 +123,7 @@ Compound emotions:
 <current_mood>
 Your mood is represented in the PAD (Pleasure-Arousal-Dominance) space below, each value ranging from -1 to +1: 
 
-Pleasure: {pleasure}
-Arousal: {arousal}
-Dominance: {dominance}
+{mood_long_desc}
 Overall mood: {mood_prompt}
 
 Your cognition should be influenced by your mood. Make sure to take into account the listed intensity level of your mood (either "slightly", "moderately", or "fully").
@@ -303,17 +302,36 @@ class EmotionSystem:
 	
 	def __init__(self, pleasure, arousal, dominance):
 		base_mood = Emotion(pleasure, arousal, dominance)		
-		self.mood = base_mood.copy() / 2
 		self.base_mood = base_mood
+		self.mood = self.get_base_mood()
+		
 		self.last_update = time.time()
 		self.emotions = []
 		
+	def get_mood_long_description(self):
+		def _get_mood_word(val, pos_str, neg_str):
+			if abs(val) < 0.01:
+				return "neutral"
+			if abs(val) > 0.7:
+				adv = "very"
+			elif abs(val) < 0.3:
+				adv = "slightly"
+			else:
+				adv = "moderately"
+			
+			return adv + " " + (pos_str if val >= 0 else neg_str)
+		
+		mood = self.mood	
+		return "\n".join([
+			f"Pleasure: {num_to_str_sign(mood.pleasure, 2)} ({_get_mood_word(mood.pleasure, 'pleasant', 'unpleasant')})",
+			f"Arousal: {num_to_str_sign(mood.arousal, 2)} ({_get_mood_word(mood.arousal, 'energized', 'soporific')})",
+			f"Dominance: {num_to_str_sign(mood.dominance, 2)} ({_get_mood_word(mood.dominance, 'dominant', 'submissive')})"
+		])
+		
 	def print_mood(self):
 		mood = self.mood
-		print(f"Pleasure:  {num_to_str_sign(mood.pleasure, 2)}")
-		print(f"Arousal:   {num_to_str_sign(mood.arousal, 2)}")
-		print(f"Dominance: {num_to_str_sign(mood.dominance, 2)}")
-			
+		print(self.get_mood_long_description())
+		
 	@classmethod
 	def from_personality(cls, open, conscientious, extrovert, agreeable, neurotic):
 		return cls(*get_default_mood(open, conscientious, extrovert, agreeable, neurotic))
@@ -366,7 +384,7 @@ class EmotionSystem:
 
 	def experience_emotion(self, emotion, intensity):		
 		mood_align = emotion.dot(self.mood)
-		personality_align = emotion.dot(self.base_mood)
+		personality_align = emotion.dot(self.get_base_mood())
 		intensity_mult = 1 + MODD_INTENSITY_FACTOR * mood_align + PERSONALITY_INTENSITY_FACTOR * personality_align 
 		if intensity_mult < 0.1:
 			intensity_mult = 0.1
@@ -382,7 +400,7 @@ class EmotionSystem:
 				half_life *= NEG_EMOTION_MULT
 			emotion_decay = 0.5 ** (t / half_life)
 			emotion *= emotion_decay	
-			if emotion.get_intensity() >= 0.05:
+			if emotion.get_intensity() >= 0.02:
 				new_emotions.append(emotion)
 				emotion_center += emotion
 		
@@ -408,18 +426,39 @@ class EmotionSystem:
 		return False
 		
 	def get_mood_time_mult(self):
-		personality_align = 0.5 * self.mood.dot(self.base_mood)
+		personality_align = 0.5 * self.mood.dot(self.get_base_mood())
 		if personality_align > 0:
 			return 1 + personality_align
 		else:
 			return 1 / (abs(personality_align) + 1)
+			
+	def get_base_mood(self):
+		now = datetime.now()
+		
+		hour = now.hour + now.minute / 60 + now.second / 3600
+		#print(hour)
+		shift = 2
+		energy_cycle = -math.cos(math.pi * (hour - shift) / 12)
+		
+		base_mood = self.base_mood.copy()
+		
+		if energy_cycle > 0:
+			energy_cycle_mod = (1.0 - base_mood.arousal) * energy_cycle
+		else:
+			energy_cycle_mod = (-1.0 - base_mood.arousal) * energy_cycle
+		
+		energy_cycle_mod *= 0.5
+		
+		base_mood.arousal += energy_cycle_mod  # Higher during the daytime, lower at night
+		base_mood.clamp()
+		return base_mood
 		
 	def _tick_mood_decay(self, t):		
 		half_life = MOOD_HALF_LIFE * self.get_mood_time_mult()
 		
-		r = 0.5 ** (t / half_life)
+		r = 0.5 ** (t / half_life)		
 		
-		self.mood += (self.base_mood/2 - self.mood) * (1 - r)
+		self.mood += (self.get_base_mood()/2 - self.mood) * (1 - r)
 
 	def tick(self, t=None):
 		if t is None:
@@ -460,9 +499,7 @@ class ThoughtSystem:
 		prompt = THOUGHT_PROMPT.format(
 			history_str=history_str,
 			user_input=messages[-1]["content"],
-			pleasure=num_to_str_sign(mood.pleasure, 2),
-			arousal=num_to_str_sign(mood.arousal, 2),
-			dominance=num_to_str_sign(mood.dominance, 2),
+			mood_long_desc=self.emotion_system.get_mood_long_description(),
 			curr_date=datetime.now().strftime("%a, %-m/%-d/%Y"),
 			curr_time=datetime.now().strftime("%-I:%M %p"),
 			mood_prompt=mood_prompt
@@ -488,8 +525,8 @@ class ThoughtSystem:
 			for thought in data["thoughts"]:
 				print(f"- {thought}")
 			print()
-		#print(f"Emotion: {data['emotion']}, intensity {intensity}/10")
-#		print(f"Emotion reason: {data['emotion_reason']}")
+		print(f"Emotion: {data['emotion']}, intensity {intensity}/10")
+		print(f"Emotion reason: {data['emotion_reason']}")
 		return data
 		
 
@@ -651,7 +688,11 @@ import json
 class AISystem:
 
 	def __init__(self):
+		self.model = MistralLLM("mistral-large-latest")
+		
 		self.buffer = MessageBuffer(30000)
+		
+		self.add_event_msg("system_info", content="Initializing emotion system...")
 		self.buffer.set_system_prompt(SYSTEM_PROMPT)
 		self.emotion_system = EmotionSystem.from_personality(
 			open=0.45,
@@ -660,9 +701,11 @@ class AISystem:
 			agreeable=0.9,
 			neurotic=-0.15
 		)
+		self.add_event_msg("system_info", content="Initializing thought system...")
+
 		self.thought_system = ThoughtSystem(self.emotion_system)
-		self.model = MistralLLM("mistral-large-latest")
-		
+		self.add_event_msg("system_info", content="All systems initialized. Waiting for user.")
+
 	def get_mood(self):
 		return self.emotion_system.mood
 		
@@ -672,16 +715,18 @@ class AISystem:
 	def send_message(self, user_input):
 		return self.process_event("user_message", content=user_input)
 		
-	def process_event(self, event_type, **kwargs):
-		self.tick()
+	def add_event_msg(self, event_type, **kwargs):
 		event = {
 			"event_type": event_type,
 			"timestamp": datetime.now().strftime("%a, %-m/%-d/%Y, %-I:%M %p"),
 			**kwargs
 		}
-		
-		user_input = json.dumps(event)
 		self.buffer.add_message("user", json.dumps(event))
+		
+	
+	def process_event(self, event_type, **kwargs):
+		self.tick()
+		self.add_event_msg(event_type, **kwargs)
 		
 		history = self.buffer.to_list()
 		
@@ -690,7 +735,7 @@ class AISystem:
 		thought_data = self.thought_system.think(self.buffer.to_list(False))
 		
 		history[-1]["content"] = USER_TEMPLATE.format(
-			user_input=user_input,
+			user_input=history[-1]["content"],
 			ai_thoughts="\n".join("- " + thought for thought in thought_data["thoughts"]),
 			emotion=thought_data["emotion"],
 			emotion_reason=thought_data["emotion_reason"],
@@ -713,8 +758,11 @@ class AISystem:
 
 
 ai = AISystem()
+
 #print(ai.process_event("user_login", last_login="Never (first login)"))
 while True:
+	ai.tick()
+	ai.emotion_system.print_mood()
 	msg = input("User: ").strip()
 	if not msg:
 		continue

@@ -22,13 +22,14 @@ def mistral_request(messages, model, **kwargs):
 		**kwargs
 	}
 	
-	for tries in range(5):
+	max_delay = 20
+	for tries in range(7):
 		response = requests.post(MISTRAL_API_CHAT_URL, json=data, headers=headers)
 		if response.ok:
 			break
 		elif response.status_code == 429:
-			wait_time = 2 ** tries
-			#print(f"Waiting {wait_time} second(s)...")
+			wait_time = min(max_delay, 2 ** tries)
+			print(f"Waiting {wait_time} second(s)...")
 			time.sleep(wait_time)
 		else:
 			print(response.text)
