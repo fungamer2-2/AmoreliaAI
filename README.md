@@ -1,6 +1,10 @@
 # HumanlikeAI
 An AI companion designed for more humanlike interactions
 
+![GitHub commit activity](https://img.shields.io/github/commit-activity/m/fungamer2-2/HumanlikeAI)
+![GitHub last commit](https://img.shields.io/github/last-commit/fungamer2-2/HumanlikeAI)
+
+
 Currently uses [Mistral AI](https://mistral.ai) models. To use this project, you'll need a Mistral AI API key, and store it in a `.env` file
 
 ## Thought system
