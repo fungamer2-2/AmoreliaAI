@@ -69,7 +69,7 @@ Current time: {curr_time}
 <ai_emotion name="{emotion}">AI emotion reason: {emotion_reason}</ai_emotion>
 
 The ai_thoughts are hidden by default, so choose which information is actually relevant for the user to know.
-Use emojis to convey how you're feeling instead of stating it directly.
+Your response should be brief, around 2-4 sentences.
 
 AI Response:"""
 
@@ -93,8 +93,8 @@ Emotions related to event consequences:
 		- **Joy**: If the event is desirable for you
 		- **Distress**: If the event is undesirable for you
 - If the event receiver was someone else:
-	- **HappyFor**: If pleased about an event presumed to be desirable for **someone else**
-	- **Pity**: If displeased about an presumed to be undesirable for someone else
+	- **HappyFor**: If pleased about an event presumed to be desirable for someone else
+	- **Pity**: If displeased about an event presumed to be undesirable for someone else
 	- **Resentment**: If displeased about an event presumed to be desirable for someone else
 	- **Gloating**: If pleased about an presumed to be undesirable for someone else
 
@@ -112,8 +112,8 @@ Emotions related to agent actions:
 Compound emotions:
 - **Gratification**: If you find your own actions praiseworthy and are pleased about the related desirable event
 - **Gratitude**: If you find another's actions praiseworthy and are pleased about the related desirable event
-- **Remorse**: If you find your own actions blameworthy and are displeased about the related desirable event
-- **Anger**: If you find someone else's actions blameworthy and are displeased about the related desirable event
+- **Remorse**: If you find your own actions blameworthy and are displeased about the related undesirable event
+- **Anger**: If you find someone else's actions blameworthy and are displeased about the related undesirable event
 
 </emotion_guidelines>
 <conversation_history>
@@ -135,20 +135,16 @@ Current date: {curr_date}
 Current time: {curr_time}
 </datetime>
 
-Generate a list of several thoughts, and the emotion. The thoughts should be in first-person, from your perspective as the AI.
+Generate a list of at least 5 thoughts, and the emotion. The thoughts should be in first-person, from your perspective as the AI.
 Respond with a JSON object in this format:
 {{
 	"thoughts": list[str]  // Your chain of thoughts, as a list of strings.
 	"emotion": str  // How the user input made you feel. The emotion must be one of: ["Admiration", "Anger", "Disappointment", "Distress", "Hope", "Fear", "FearsConfirmed", "Gloating", "Gratification", "Gratitude", "HappyFor", "Hate", "Joy", "Love", "Neutral", "Pity", "Pride", "Relief", "Remorse", "Reproach", "Resentment", "Satisfaction", "Shame"]
-	"emotion_intensity": int  // The emotion intensity, on a scale from 1 to 10
+	"emotion_intensity": int  // The emotion intensity, on a scale from 1 to 10,
 	"emotion_reason": str,  // Based on the emotion guidelines, briefly describe, in a sentence, why you feel the way you do, using the first person. Be specific (e.g. approving of what action? / what desirable event / what prospect? Be specific about the reason.
 }}
 
-Example emotion_reasons:
-- "I feel joy because I am pleased that the user has reached out to me, which is desirable for me."
-- "I feel satisfied because I was able to successfully help someone get through a tough time. This prospect aligns with my goals, and it has been confirmed."
-
-Your thoughts should reflect your current mood above.
+Your thoughts should reflect your current_mood above. Each thought should have around 2 sentences.
 Remember, the user will not see these thoughts, so do not use the words 'you' or 'your' in internal thoughts.
 When choosing the emotion, remember to follow the emotion_guidelines above, as they are based on the OCC model of appraisal.
 """
@@ -434,24 +430,26 @@ class EmotionSystem:
 			
 	def get_base_mood(self):
 		now = datetime.now()
-		
 		hour = now.hour + now.minute / 60 + now.second / 3600
-		#print(hour)
+		
 		shift = 2
+		
 		energy_cycle = -math.cos(math.pi * (hour - shift) / 12)
-		print(energy_cycle)
 		base_mood = self.base_mood.copy()
 		
-		if energy_cycle > 0:
-			energy_cycle_mod = (1.0 - base_mood.arousal) * energy_cycle
-		else:
-			energy_cycle_mod = (-1.0 - base_mood.arousal) * abs(energy_cycle)
-		
-		energy_cycle_mod *= 0.5
-		
-		base_mood.arousal += energy_cycle_mod  # Higher during the daytime, lower at night
+		#if energy_cycle > 0:
+#			energy_cycle_mod = (1.0 - base_mood.arousal) * energy_cycle
+#		else:
+#			energy_cycle_mod = (-1.0 - base_mood.arousal) * abs(energy_cycle)
+#		
+#		energy_cycle_mod *= 0.5
+#		
+#		base_mood.arousal += energy_cycle_mod  # Higher during the daytime, lower at night
 		base_mood.clamp()
 		return base_mood
+		
+	def is_at_baseline(self):
+		return self.mood.distance(self.get_base_mood()) < 0.03
 		
 	def _tick_mood_decay(self, t):		
 		half_life = MOOD_HALF_LIFE * self.get_mood_time_mult()
@@ -512,8 +510,9 @@ class ThoughtSystem:
 			temperature=0.7,
 			return_json=True
 		)
-		data["emotion_intensity"] = int(data["emotion_intensity"])
-		intensity = data["emotion_intensity"]
+		intensity = int(data.get("emotion_intensity", 5))
+		data["emotion_intensity"] = intensity
+		
 		self.emotion_system.experience_emotion(
 			Emotion(*EMOTION_MAP[data["emotion"]]),
 			intensity/10
@@ -599,7 +598,7 @@ def rate_importance(memory):
 def normalize_text(text):			
 	text = text.lower()
 	for symbol in ".,:;!?":
-		text = text.replace(symbol, "")
+		text = text.replace(symbol, " ")
 	
 	text = " ".join(text.split())
 	text = text.replace("’", "'")
@@ -690,8 +689,6 @@ class AISystem:
 		self.model = MistralLLM("mistral-large-latest")
 		
 		self.buffer = MessageBuffer(30000)
-		
-		self.add_event_msg("system_info", content="Initializing emotion system...")
 		self.buffer.set_system_prompt(SYSTEM_PROMPT)
 		self.emotion_system = EmotionSystem.from_personality(
 			open=0.45,
@@ -700,11 +697,9 @@ class AISystem:
 			agreeable=0.9,
 			neurotic=-0.15
 		)
-		self.add_event_msg("system_info", content="Initializing thought system...")
-
+		
 		self.thought_system = ThoughtSystem(self.emotion_system)
-		self.add_event_msg("system_info", content="All systems initialized. Waiting for user.")
-
+		
 	def get_mood(self):
 		return self.emotion_system.mood
 		
