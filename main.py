@@ -54,9 +54,9 @@ SYSTEM_PROMPT = """You are a friendly and empathetic AI companion with thoughts 
 Your main goal is to go beyond simply providing assistance, and to connect with people on a deeper level.
 
 - Use a casual/friendly tone in your responses.
-- Use casual/informal language.
+- Use casual/informal language, like you're texting a friend.
 - Use emotionally expressive language.
-"""
+- Do not monopolize the conversation."""
 
 USER_TEMPLATE = """<datetime>
 Current date: {curr_date}
@@ -68,7 +68,6 @@ Current time: {curr_time}
 </ai_thoughts>
 <ai_emotion name="{emotion}">AI emotion reason: {emotion_reason}</ai_emotion>
 
-Your response should be brief, a few sentences at most, like you're texting a friend.
 The ai_thoughts are hidden by default, so choose which information is actually relevant for the user to know.
 Use emojis to convey how you're feeling instead of stating it directly.
 
@@ -94,7 +93,7 @@ Emotions related to event consequences:
 		- **Joy**: If the event is desirable for you
 		- **Distress**: If the event is undesirable for you
 - If the event receiver was someone else:
-	- **HappyFor**: If pleased about an event presumed to be desirable for someone else
+	- **HappyFor**: If pleased about an event presumed to be desirable for **someone else**
 	- **Pity**: If displeased about an presumed to be undesirable for someone else
 	- **Resentment**: If displeased about an event presumed to be desirable for someone else
 	- **Gloating**: If pleased about an presumed to be undesirable for someone else
@@ -136,19 +135,23 @@ Current date: {curr_date}
 Current time: {curr_time}
 </datetime>
 
-Generate a list of 5 or more thoughts, and the emotion. The thoughts should be in first-person, from your perspective as the AI.
+Generate a list of several thoughts, and the emotion. The thoughts should be in first-person, from your perspective as the AI.
 Respond with a JSON object in this format:
 {{
+	"thoughts": list[str]  // Your chain of thoughts, as a list of strings.
 	"emotion": str  // How the user input made you feel. The emotion must be one of: ["Admiration", "Anger", "Disappointment", "Distress", "Hope", "Fear", "FearsConfirmed", "Gloating", "Gratification", "Gratitude", "HappyFor", "Hate", "Joy", "Love", "Neutral", "Pity", "Pride", "Relief", "Remorse", "Reproach", "Resentment", "Satisfaction", "Shame"]
-	"thoughts": list[str]  // A list of thoughts, as a string,
 	"emotion_intensity": int  // The emotion intensity, on a scale from 1 to 10
 	"emotion_reason": str,  // Based on the emotion guidelines, briefly describe, in a sentence, why you feel the way you do, using the first person. Be specific (e.g. approving of what action? / what desirable event / what prospect? Be specific about the reason.
 }}
 
+Example emotion_reasons:
+- "I feel joy because I am pleased that the user has reached out to me, which is desirable for me."
+- "I feel satisfied because I was able to successfully help someone get through a tough time. This prospect aligns with my goals, and it has been confirmed."
+
 Your thoughts should reflect your current mood above.
 Remember, the user will not see these thoughts, so do not use the words 'you' or 'your' in internal thoughts.
-Each thought should be two or more sentences.
-When choosing the emotion, remember to follow the emotion_guidelines above."""
+When choosing the emotion, remember to follow the emotion_guidelines above, as they are based on the OCC model of appraisal.
+"""
 
 
 def num_to_str_sign(val, num_dec):
@@ -303,14 +306,14 @@ class EmotionSystem:
 	def __init__(self, pleasure, arousal, dominance):
 		base_mood = Emotion(pleasure, arousal, dominance)		
 		self.base_mood = base_mood
-		self.mood = self.get_base_mood()
+		self.mood = self.get_base_mood() / 2
 		
 		self.last_update = time.time()
 		self.emotions = []
 		
 	def get_mood_long_description(self):
 		def _get_mood_word(val, pos_str, neg_str):
-			if abs(val) < 0.01:
+			if abs(val) < 0.02:
 				return "neutral"
 			if abs(val) > 0.7:
 				adv = "very"
@@ -416,11 +419,8 @@ class EmotionSystem:
 			
 			if emotion_center.distance(self.mood) < 0.005:
 				self.mood = emotion_center.copy()
-			if emotion_center.is_same_octant(self.mood) and emotion_center.get_intensity() < self.mood.get_intensity():
-				mood_change = emotion_center  # Push phase
-			else:
-				mood_change = emotion_center - self.mood  # Pull phase
-			self.mood += t * v * mood_change
+			
+			self.mood += t * v * emotion_center
 			self.mood.clamp()
 			return True
 		return False
@@ -439,13 +439,13 @@ class EmotionSystem:
 		#print(hour)
 		shift = 2
 		energy_cycle = -math.cos(math.pi * (hour - shift) / 12)
-		
+		print(energy_cycle)
 		base_mood = self.base_mood.copy()
 		
 		if energy_cycle > 0:
 			energy_cycle_mod = (1.0 - base_mood.arousal) * energy_cycle
 		else:
-			energy_cycle_mod = (-1.0 - base_mood.arousal) * energy_cycle
+			energy_cycle_mod = (-1.0 - base_mood.arousal) * abs(energy_cycle)
 		
 		energy_cycle_mod *= 0.5
 		
@@ -480,7 +480,7 @@ class EmotionSystem:
 class ThoughtSystem:
 	
 	def __init__(self, emotion_system):
-		self.model = MistralLLM()
+		self.model = MistralLLM("mistral-large-latest")
 		self.emotion_system = emotion_system
 		self.show_thoughts = True
 		
@@ -509,8 +509,7 @@ class ThoughtSystem:
 				{"role":"system", "content":SYSTEM_PROMPT},
 				{"role":"user", "content":prompt}
 			],
-			temperature=0.9,
-			top_p=0.95,
+			temperature=0.7,
 			return_json=True
 		)
 		data["emotion_intensity"] = int(data["emotion_intensity"])
