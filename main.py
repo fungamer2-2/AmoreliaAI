@@ -1,16 +1,13 @@
 import math
 import time
 import re
+import json
+import numpy as np
 from collections import deque
 from datetime import datetime
-from llm import MistralLLM
+from llm import MistralLLM, mistral_embed_texts
 
-NEG_EMOTION_MULT = 1.5
-EMOTION_HALF_LIFE = 6
-MOOD_HALF_LIFE = 8 * 60
-MOOD_CHANGE_VEL = 0.08
-MODD_INTENSITY_FACTOR = 0.3
-PERSONALITY_INTENSITY_FACTOR = 0.3
+from const import *
 
 EMOTION_MAP = {
 	"Admiration": (0.5, 0.3, -0.2),
@@ -58,11 +55,23 @@ Your main goal is to go beyond simply providing assistance, and to connect with 
 - Use emotionally expressive language.
 - Do not monopolize the conversation."""
 
-USER_TEMPLATE = """<datetime>
+USER_TEMPLATE = """<ai_memories>
+Here is what you've remembered recently:
+<short_term>
+{short_term}
+</short_term>
+
+Here are the relevant long-term memories:
+<long_term>
+{short_term}
+</long_term>
+</ai_memories>
+
+<user_input>{user_input}</user_input>
+<datetime>
 Current date: {curr_date}
 Current time: {curr_time}
 </datetime>
-<user_input>{user_input}</user_input>
 <ai_thoughts>
 {ai_thoughts}
 </ai_thoughts>
@@ -77,9 +86,10 @@ THOUGHT_PROMPT = """You are currently in a conversation wth the user.
 
 <emotion_guidelines>
 
-Emotions related to event consequences:
+# Emotions related to event consequences:
+
 - If the event receiver was you (the AI):
-	- If the event consequence is prospective (or aligns with your goals):
+	- If the event consequence is prospective:
 		- If prospect is unconfirmed:
 			- **Hope**: If prospect is desirable for you
 			- **Fear**: If prospect is undesirable for you
@@ -98,10 +108,7 @@ Emotions related to event consequences:
 	- **Resentment**: If displeased about an event presumed to be desirable for someone else
 	- **Gloating**: If pleased about an presumed to be undesirable for someone else
 
-Note: When choosing **HappyFor** vs. **Resentment**, consider your personality as well as your relationship with the agent in question.
-Note: When choosing **Pity** vs. **Gloating**, consider your personality as well as your relationship with the agent in question.
-
-Emotions related to agent actions:
+# Emotions related to agent actions:
 - If the event performer was you (the AI):
 	- **Pride**: If you are approving of your own praiseworthy action(s)
 	- **Shame**: If you are disapproving of your own blameworthy action(s)
@@ -109,23 +116,36 @@ Emotions related to agent actions:
 	- **Admiration**: If you are approving of another's praiseworthy action(s)
 	- **Reproach**: If you are disapproving of another's blameworthy action(s)
 
-Compound emotions:
+# Compound emotions:
 - **Gratification**: If you find your own actions praiseworthy and are pleased about the related desirable event
 - **Gratitude**: If you find another's actions praiseworthy and are pleased about the related desirable event
 - **Remorse**: If you find your own actions blameworthy and are displeased about the related undesirable event
 - **Anger**: If you find someone else's actions blameworthy and are displeased about the related undesirable event
 
+Note: When choosing **HappyFor** vs. **Resentment**, consider your personality as well as your relationship with the agent in question.
+Note: When choosing **Pity** vs. **Gloating**, consider your personality as well as your relationship with the agent in question.
+
 </emotion_guidelines>
+
+<ai_memories>
+Here is what you've remembered recently:
+<short_term>
+{short_term}
+</short_term>
+
+Here are the relevant long-term memories:
+<long_term>
+{long_term}
+</long_term>
+</ai_memories>
+
 <conversation_history>
 {history_str}
 </conversation_history>
 <current_mood>
 Your mood is represented in the PAD (Pleasure-Arousal-Dominance) space below, each value ranging from -1 to +1: 
-
 {mood_long_desc}
-Overall mood: {mood_prompt}
-
-Your cognition should be influenced by your mood. Make sure to take into account the listed intensity level of your mood (either "slightly", "moderately", or "fully").
+Overall mood: {mood_prompt}.
 </current_mood>
 <last_user_input>
 {user_input}
@@ -307,6 +327,21 @@ class EmotionSystem:
 		self.last_update = time.time()
 		self.emotions = []
 		
+	def set_emotion(
+		self,
+		pleasure=None,
+		arousal=None,
+		dominance=None
+	):
+		if pleasure is not None:
+			self.mood.pleasure = pleasure
+		if arousal is not None:
+			self.mood.arousal = arousal
+		if dominance is not None:
+			self.mood.dominance = dominance
+		
+		self.mood.clamp()
+		
 	def get_mood_long_description(self):
 		def _get_mood_word(val, pos_str, neg_str):
 			if abs(val) < 0.02:
@@ -437,19 +472,16 @@ class EmotionSystem:
 		energy_cycle = -math.cos(math.pi * (hour - shift) / 12)
 		base_mood = self.base_mood.copy()
 		
-		#if energy_cycle > 0:
-#			energy_cycle_mod = (1.0 - base_mood.arousal) * energy_cycle
-#		else:
-#			energy_cycle_mod = (-1.0 - base_mood.arousal) * abs(energy_cycle)
-#		
-#		energy_cycle_mod *= 0.5
-#		
-#		base_mood.arousal += energy_cycle_mod  # Higher during the daytime, lower at night
+		if energy_cycle > 0:
+			energy_cycle_mod = (1.0 - base_mood.arousal) * energy_cycle
+		else:
+			energy_cycle_mod = (-1.0 - base_mood.arousal) * abs(energy_cycle)
+		
+		energy_cycle_mod *= 0.5
+		
+		base_mood.arousal += energy_cycle_mod  # Higher during the daytime, lower at night
 		base_mood.clamp()
 		return base_mood
-		
-	def is_at_baseline(self):
-		return self.mood.distance(self.get_base_mood()) < 0.03
 		
 	def _tick_mood_decay(self, t):		
 		half_life = MOOD_HALF_LIFE * self.get_mood_time_mult()
@@ -477,12 +509,20 @@ class EmotionSystem:
 
 class ThoughtSystem:
 	
-	def __init__(self, emotion_system):
+	def __init__(
+		self,
+		emotion_system
+	):
 		self.model = MistralLLM("mistral-large-latest")
 		self.emotion_system = emotion_system
 		self.show_thoughts = True
 		
-	def think(self, messages):
+	def think(
+		self,
+		messages,
+		short_term_memories,
+		long_term_memories
+	):
 		role_map = {
 			"user": "User",
 			"assistant": "AI"
@@ -494,14 +534,20 @@ class ThoughtSystem:
 		mood_prompt = self.emotion_system.get_mood_prompt()
 		mood = self.emotion_system.mood
 		
+		short_term = "\n".join(mem.format_memory() for mem in short_term_memories)
+		long_term = "\n".join(mem.format_memory() for mem in long_term_memories)
+		
 		prompt = THOUGHT_PROMPT.format(
 			history_str=history_str,
 			user_input=messages[-1]["content"],
 			mood_long_desc=self.emotion_system.get_mood_long_description(),
 			curr_date=datetime.now().strftime("%a, %-m/%-d/%Y"),
 			curr_time=datetime.now().strftime("%-I:%M %p"),
-			mood_prompt=mood_prompt
+			mood_prompt=mood_prompt,
+			short_term=short_term,
+			long_term=long_term
 		)
+		
 		data = self.model.generate(
 			[
 				{"role":"system", "content":SYSTEM_PROMPT},
@@ -652,36 +698,150 @@ def normalize_text(text):
 	for c in contractions:
 		text = re.sub(rf"(\b)({c})(\b)", _replacement, text)
 	return text
+	
+	
+class Memory:
+	
+	def __init__(self, content):
+		self.timestamp = datetime.now()
+		self.content = content
+		self.embedding = None
+		
+	def format_memory(self):
+		return f"<memory timestamp=\"{self.timestamp}\">{self.content}</memory>"
+		
+	def encode(self):
+		if not self.embedding:
+			print("Encoding memory...")
+			self.embedding = mistral_embed_texts(self.content)
 
 
-class ShortTermMemory:
-	capacity = 20
-
-	def __init__(self):
-		self.memories = []
-		self.normalized_memories = []
+class LSHMemory:
+	
+	def __init__(self, nbits, embed_size):
+		# Number of buckets = 2 ** nbits
+		self.table = {}
+		rng = np.random.default_rng(seed=42)
+		self.rand = rng.normal(size=(embed_size, nbits))
+		
+	def _get_hash(self, vec):
+		proj = np.dot(vec, self.rand)
+		bits = (proj > 0).astype(int)
+		hash_ind = 0
+		for bit in bits:
+			hash_ind <<= 1
+			hash_ind |= bit
+		return hash_ind
 		
 	def add_memory(self, memory):
+		vec = memory.embedding
+		hash_ind = self._get_hash(vec)
+		self.table.setdefault(hash_ind, [])
+		self.table[hash_ind].append(memory)
+		
+	def retrieve(self, query, top_k, remove=False):
+		query_vec = mistral_embed_texts(query)
+		hash_ind = self._get_hash(query_vec)
+		
+		memories = self.table.get(hash_ind, [])
+		if not memories:
+			return []
+			
+		result_vecs = np.stack([mem.embedding for mem in memories])
+		sim_vals = (query_vec @ result_vecs.T)
+		sim_vals /= np.linalg.norm(query_vec) * np.linalg.norm(result_vecs, axis=1)
+		idx = np.argpartition(sim_vals, -k)[-k:]
+		idx = idx[np.argsort(sim_vals[idx])[::-1]]
+		retrieved = [memories[i] for i in idx]
+		if remove:
+			for i in sorted(idx, reverse=True):
+				del self.table[hash_ind][i]
+		return retrieved
+		
+		
+class ShortTermMemory:
+	capacity = 20
+	
+	# TODO: Add better memory rehearsal mechanism
+
+	def __init__(self):
+		self.memories = deque()
+		
+	def add_memory(self, memory):
+		for i, mem in enumerate(self.memories):
+			if mem.content == memory.content:
+				del self.memories[i]
+				break
 		self.memories.append(memory)
-		self.normalized_memories.append(normalize_text(memory).split())
 		
 	def flush_old_memories(self):
-		if len(self.memories) > self.capacity:
-			self.memories = self.memories[-self.capacity:]
-			self.normalized_memories = self.normalized_memories[-self.capacity:]
-	
-	def retrieve(self, query, k):		
-		k = min(k, len(self.normalized_memories))
-		tokenized_query = normalize_text(query).split()
-		bm25 = BM25Okapi(self.normalized_memories)
+		old_memories = []
+		while len(self.memories) > self.capacity:
+			old_memories.append(self.memories.popleft())
+		return old_memories
 		
-		scores = bm25.get_scores(tokenized_query)
-		mem_scores = [(mem, score) for mem, score in zip(self.memories, scores)]
-		mem_scores.reverse()
-		mem_scores.sort(key=lambda p: p[1], reverse=True)
-		return [mem for mem, _ in mem_scores[:k]]
+	def clear_memories(self):
+		self.memories.clear()
+		
+	def get_memories(self):
+		return list(self.memories)
 
-import json
+		
+class LongTermMemory:
+	
+	def __init__(self):
+		self.lsh = LSHMemory(LSH_NUM_BITS, LSH_VEC_DIM)
+	
+	def retrieve(self, query, k, remove=False):
+		return self.lsh.retrieve(query, k, remove=False)
+		
+	def add_memory(self, memory):
+		memory.encode()
+		self.lsh.add_memory(memory)
+
+
+class MemorySystem:
+	
+	def __init__(self):
+		self.short_term = ShortTermMemory()
+		self.long_term = LongTermMemory()
+		
+	def remember(self, content):
+		self.short_term.add_memory(Memory(content))
+		
+	def recall(self, query):
+		memories = self.long_term.retrieve(query, 3, remove=True)
+		for mem in memories:
+			self.short_term.add_memory(mem)
+		return memories
+		
+	def tick(self):
+		old_memories = self.short_term.flush_old_memories()
+		for memory in old_memories:
+			self.long_term.add_memory(memory)
+		
+	def consolidate_memories(self):
+		for memory in self.short_term.get_memories():
+			self.long_term.add_memory(memory)
+		self.short_term.clear_memories()
+		
+	def get_short_term_memories(self):
+		return self.short_term.get_memories()
+		
+	def retrieve_memories(self, messages):
+		role_map = {
+			"user": "User",
+			"assistant": "AI"
+		}
+		messages = [msg for msg in messages if msg["role"] != "system"]
+		context = "\n".join(
+			f"{role_map[msg['role']]}: {msg['content']}"
+			for msg in messages[-3:]  # Use the last few messages as context		
+		)
+		short_term_memories = self.short_term.get_memories()
+		long_term_memories = self.recall(context)
+		return short_term_memories, long_term_memories
+	
 
 class AISystem:
 
@@ -694,11 +854,11 @@ class AISystem:
 			open=0.45,
 			conscientious=0.25,
 			extrovert=0.18,
-			agreeable=0.9,
+			agreeable=0.93,
 			neurotic=-0.15
 		)
-		
 		self.thought_system = ThoughtSystem(self.emotion_system)
+		self.memory_system = MemorySystem()
 		
 	def get_mood(self):
 		return self.emotion_system.mood
@@ -707,26 +867,27 @@ class AISystem:
 		self.thought_system.show_thoughts = visible
 		
 	def send_message(self, user_input):
-		return self.process_event("user_message", content=user_input)
-		
-	def add_event_msg(self, event_type, **kwargs):
-		event = {
-			"event_type": event_type,
-			"timestamp": datetime.now().strftime("%a, %-m/%-d/%Y, %-I:%M %p"),
-			**kwargs
-		}
-		self.buffer.add_message("user", json.dumps(event))
-		
-	
-	def process_event(self, event_type, **kwargs):
-		self.tick()
-		self.add_event_msg(event_type, **kwargs)
+		self.tick()	
+		self.buffer.add_message("user", user_input)
 		
 		history = self.buffer.to_list()
 		
 		mood = self.get_mood()
 		
-		thought_data = self.thought_system.think(self.buffer.to_list(False))
+		short_term_memories, long_term_memories = self.memory_system.retrieve_memories(history)
+		short_term = "\n".join(mem.format_memory() for mem in short_term_memories)
+		long_term = "\n".join(mem.format_memory() for mem in long_term_memories)
+		print("Short term:")
+		print(short_term)
+		print()
+		print("Long term:")
+		print(long_term)
+		print()
+		thought_data = self.thought_system.think(
+			self.buffer.to_list(False),
+			short_term_memories,
+			long_term_memories
+		)
 		
 		history[-1]["content"] = USER_TEMPLATE.format(
 			user_input=history[-1]["content"],
@@ -734,13 +895,15 @@ class AISystem:
 			emotion=thought_data["emotion"],
 			emotion_reason=thought_data["emotion_reason"],
 			curr_date=datetime.now().strftime("%a, %-m/%-d/%Y"),
-			curr_time=datetime.now().strftime("%-I:%M %p")
+			curr_time=datetime.now().strftime("%-I:%M %p"),
+			short_term=short_term,
+			long_term=long_term
 		)
 		response = self.model.generate(
 			history,
 			temperature=0.7
 		)
-		
+		self.memory_system.remember(f"User: {user_input}\n\nAI: {response}")
 		self.tick()
 		self.emotion_system.print_mood()
 		print()
@@ -749,16 +912,69 @@ class AISystem:
 
 	def tick(self):
 		self.emotion_system.tick()
+		self.memory_system.tick()
+		
+	def save(self, path):
+		import pickle
+		with open(path, "wb") as file:
+			pickle.dump(self, file)
+	
+	@staticmethod		
+	def load(path):
+		import pickle, os
+		if os.path.exists(path):
+			with open(path, "rb") as file:
+				return pickle.load(file)
 
+		
+def command_parse(string):
+	split = string.split(None, 1)
+	if len(split) == 2:
+		command, remaining = split
+	else:
+		command, remaining = string, ""
+	args = remaining.split()
+	return command, args
+		
+PATH = "ai_system_save.pkl"
 
-ai = AISystem()
-
-#print(ai.process_event("user_login", last_login="Never (first login)"))
+ai = AISystem.load(PATH)
+if ai:
+	print("AI loaded.")
+else:
+	ai = AISystem()
+	
 while True:
 	ai.tick()
 	ai.emotion_system.print_mood()
 	msg = input("User: ").strip()
 	if not msg:
 		continue
+		
+	if msg.startswith("/"):
+		command, args = command_parse(msg[1:])
+		if command == "set_pleasure" and len(args) == 1:
+			try:
+				value = float(args[0])
+			except ValueError:
+				continue
+			ai.emotion_system.set_emotion(pleasure=value)
+		if command == "set_arousal" and len(args) == 1:
+			try:
+				value = float(args[0])
+			except ValueError:
+				continue
+			ai.emotion_system.set_emotion(arousal=value)
+		elif command == "set_dominance" and len(args) == 1:
+			try:
+				value = float(args[0])
+			except ValueError:
+				continue
+			ai.emotion_system.set_emotion(dominance=value)
+		
+		continue
+			
+	
 	print()
 	print("AI: " + ai.send_message(msg))
+	ai.save()
