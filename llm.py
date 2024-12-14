@@ -70,11 +70,12 @@ def mistral_embed_texts(inputs):
 		print(response.text)
 		response.raise_for_status()
 	
-	
 	embed_res = response.json()
+	if isinstance(inputs, str):
+		return embed_res["data"][0]["embedding"]
 	return [obj["embedding"] for obj in embed_res["data"]]
 
-	
+
 class MistralLLM:
 	
 	def __init__(self, model="mistral-large-latest"):

@@ -47,7 +47,7 @@ EMOTION_PROMPTS = {
 	"neutral": "You don't feel strongly one way or the other at the moment."
 }
 
-SYSTEM_PROMPT = """You are a friendly and empathetic AI companion with thoughts and feelings.
+SYSTEM_PROMPT = """You are a friendly and empathetic AI companion with thoughts, feelings, and memories.
 Your main goal is to go beyond simply providing assistance, and to connect with people on a deeper level.
 
 - Use a casual/friendly tone in your responses.
@@ -159,15 +159,15 @@ Generate a list of at least 5 thoughts, and the emotion. The thoughts should be 
 Respond with a JSON object in this format:
 {{
 	"thoughts": list[str]  // Your chain of thoughts, as a list of strings.
+	"emotion_reason": str,  // Based on the emotion guidelines, briefly describe, in 1-2 sentences, why you feel the way you do, using the first person. Example template: "[insert event here] occured, and [1-2 sentence description of your feelings about it]."
 	"emotion": str  // How the user input made you feel. The emotion must be one of: ["Admiration", "Anger", "Disappointment", "Distress", "Hope", "Fear", "FearsConfirmed", "Gloating", "Gratification", "Gratitude", "HappyFor", "Hate", "Joy", "Love", "Neutral", "Pity", "Pride", "Relief", "Remorse", "Reproach", "Resentment", "Satisfaction", "Shame"]
 	"emotion_intensity": int  // The emotion intensity, on a scale from 1 to 10,
-	"emotion_reason": str,  // Based on the emotion guidelines, briefly describe, in a sentence, why you feel the way you do, using the first person. Be specific (e.g. approving of what action? / what desirable event / what prospect? Be specific about the reason.
 }}
 
 Your thoughts should reflect your current_mood above. Each thought should have around 2 sentences.
 Remember, the user will not see these thoughts, so do not use the words 'you' or 'your' in internal thoughts.
 When choosing the emotion, remember to follow the emotion_guidelines above, as they are based on the OCC model of appraisal.
-"""
+Pay special attention to your current_mood and ai_memories."""
 
 
 def num_to_str_sign(val, num_dec):
@@ -710,10 +710,10 @@ class Memory:
 	def format_memory(self):
 		return f"<memory timestamp=\"{self.timestamp}\">{self.content}</memory>"
 		
-	def encode(self):
+	def encode(self, embedding=None):
 		if not self.embedding:
-			print("Encoding memory...")
-			self.embedding = mistral_embed_texts(self.content)
+			self.embedding = embedding or mistral_embed_texts(self.content)
+			self.embedding = np.array(self.embedding)
 
 
 class LSHMemory:
@@ -739,14 +739,15 @@ class LSHMemory:
 		self.table.setdefault(hash_ind, [])
 		self.table[hash_ind].append(memory)
 		
-	def retrieve(self, query, top_k, remove=False):
+	def retrieve(self, query, k, remove=False):
 		query_vec = mistral_embed_texts(query)
 		hash_ind = self._get_hash(query_vec)
 		
 		memories = self.table.get(hash_ind, [])
 		if not memories:
 			return []
-			
+		
+		k = min(k, len(memories))	
 		result_vecs = np.stack([mem.embedding for mem in memories])
 		sim_vals = (query_vec @ result_vecs.T)
 		sim_vals /= np.linalg.norm(query_vec) * np.linalg.norm(result_vecs, axis=1)
@@ -793,11 +794,18 @@ class LongTermMemory:
 		self.lsh = LSHMemory(LSH_NUM_BITS, LSH_VEC_DIM)
 	
 	def retrieve(self, query, k, remove=False):
-		return self.lsh.retrieve(query, k, remove=False)
+		return self.lsh.retrieve(query, k, remove=remove)
 		
 	def add_memory(self, memory):
 		memory.encode()
 		self.lsh.add_memory(memory)
+		
+	def add_memories(self, memories):
+		memory_texts = [mem.content for mem in memories]
+		embeddings = mistral_embed_texts(memory_texts)
+		for memory, embed in zip(memories, embeddings):
+			memory.encode(embed)
+			self.lsh.add_memory(memory)
 
 
 class MemorySystem:
@@ -805,8 +813,10 @@ class MemorySystem:
 	def __init__(self):
 		self.short_term = ShortTermMemory()
 		self.long_term = LongTermMemory()
+		self.last_memory = datetime.now() 
 		
 	def remember(self, content):
+		self.last_memory = datetime.now()
 		self.short_term.add_memory(Memory(content))
 		
 	def recall(self, query):
@@ -816,13 +826,19 @@ class MemorySystem:
 		return memories
 		
 	def tick(self):
+		now = datetime.now() 
 		old_memories = self.short_term.flush_old_memories()
 		for memory in old_memories:
 			self.long_term.add_memory(memory)
+		timedelta = now - self.last_memory
+		if timedelta.seconds > 6 * 3600:
+			self.consolidate_memories()
+			self.last_memory = now
 		
 	def consolidate_memories(self):
-		for memory in self.short_term.get_memories():
-			self.long_term.add_memory(memory)
+		print("Consolidating all memories...")
+		memories = self.short_term.get_memories()
+		self.long_term.add_memories(memories)
 		self.short_term.clear_memories()
 		
 	def get_short_term_memories(self):
@@ -866,8 +882,14 @@ class AISystem:
 	def set_thoughts_shown(self, visible):
 		self.thought_system.show_thoughts = visible
 		
+	def on_startup(self):
+		self.buffer.flush()
+		
 	def send_message(self, user_input):
-		self.tick()	
+		self.tick()
+		self.last_message = datetime.now()
+		self.buffer.set_system_prompt(SYSTEM_PROMPT)
+
 		self.buffer.add_message("user", user_input)
 		
 		history = self.buffer.to_list()
@@ -877,12 +899,12 @@ class AISystem:
 		short_term_memories, long_term_memories = self.memory_system.retrieve_memories(history)
 		short_term = "\n".join(mem.format_memory() for mem in short_term_memories)
 		long_term = "\n".join(mem.format_memory() for mem in long_term_memories)
-		print("Short term:")
-		print(short_term)
-		print()
-		print("Long term:")
-		print(long_term)
-		print()
+		#print("Short term:")
+#		print(short_term)
+#		print()
+#		print("Long term:")
+#		print(long_term)
+#		print()
 		thought_data = self.thought_system.think(
 			self.buffer.to_list(False),
 			short_term_memories,
@@ -936,6 +958,7 @@ def command_parse(string):
 	args = remaining.split()
 	return command, args
 		
+
 PATH = "ai_system_save.pkl"
 
 ai = AISystem.load(PATH)
@@ -943,9 +966,11 @@ if ai:
 	print("AI loaded.")
 else:
 	ai = AISystem()
-	
+
+ai.on_startup()
 while True:
 	ai.tick()
+	
 	ai.emotion_system.print_mood()
 	msg = input("User: ").strip()
 	if not msg:
@@ -971,10 +996,12 @@ while True:
 			except ValueError:
 				continue
 			ai.emotion_system.set_emotion(dominance=value)
-		
-		continue
+		elif command == "consolidate_memories":
+			ai.memory_system.consolidate_memories()
 			
+		ai.save(PATH)
+		continue
 	
 	print()
 	print("AI: " + ai.send_message(msg))
-	ai.save()
+	ai.save(PATH)
