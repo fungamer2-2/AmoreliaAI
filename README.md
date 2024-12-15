@@ -5,7 +5,7 @@ An AI companion designed for more humanlike interactions
 ![GitHub last commit](https://img.shields.io/github/last-commit/fungamer2-2/HumanlikeAI)
 
 
-Currently uses [Mistral AI](https://mistral.ai) models. To use this project, you'll need a Mistral AI API key, and store it in a `.env` file
+Currently uses [Mistral AI](https://mistral.ai) models. To use this project, you'll need a Mistral AI API key, and store it under `MISTRAL_API_KEY` in a `.env` file
 
 ## Thought system
 
