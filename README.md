@@ -13,7 +13,7 @@ Before responding, the AI is prompted to generate a list of thoughts from its pe
 
 ## Emotion system
 
-The emotion system is based on the PAD (Pleasure-Arousal-Dominance) state model. Interactions will evoke emotions, which affect its mood. Its current emotions may affect its responses.
+The emotion system is based on the PAD (Pleasure-Arousal-Dominance) state model. Interactions with the AI will elicit emotions, which affect its mood. Its current emotions may affect its responses.
 
 ## Memory system
 
