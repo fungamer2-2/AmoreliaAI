@@ -1,16 +1,23 @@
 # HumanlikeAI
-An AI companion designed for more humanlike interactions
 
 ![GitHub commit activity](https://img.shields.io/github/commit-activity/m/fungamer2-2/HumanlikeAI)
 ![GitHub last commit](https://img.shields.io/github/last-commit/fungamer2-2/HumanlikeAI)
 ![GitHub License](https://img.shields.io/github/license/fungamer2-2/HumanlikeAI)
 
+An AI companion designed for more humanlike interactions. The goal is to create a humanlike AI system that isn't just an assistant, but a virtual companion that you can form connections with.
 
-Currently uses [Mistral AI](https://mistral.ai) models. To use this project, you'll need a Mistral AI API key, and store it under `MISTRAL_API_KEY` in a `.env` file
+Currently uses [Mistral AI](https://mistral.ai) models. To use this project, you'll need a Mistral AI API key, and store it under `MISTRAL_API_KEY` in a `.env` file.
+
+1. Download this project
+2. Make sure that [Python](https://python.org) is installed
+3. Obtain a Mistral API key at <https://console.mistral.ai/>
+4. Store the API key in a `.env` file in the project directory
+5. Run `main.py`
+
 
 ## Thought system
 
-Before responding, the AI is prompted to generate a list of thoughts from its perspective. 
+Before responding, the AI is prompted to generate a list of thoughts from its perspective. This helps make it a bit more realistic, and think as if it truly had its own personality.
 
 ## Emotion system
 
