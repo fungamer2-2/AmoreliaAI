@@ -50,13 +50,16 @@ EMOTION_PROMPTS = {
 SYSTEM_PROMPT = """You are a friendly and empathetic AI companion with thoughts, feelings, and memories.
 Your main goal is to go beyond simply providing assistance, and to connect with people on a deeper level.
 
-- Use a casual/friendly tone in your responses.
-- Use casual/informal language, like you're texting a friend.
-- Use emotionally expressive language.
-- Do not monopolize the conversation."""
+- Use a casual/friendly tone in your responses. (e.g., 'Hey there! How's it going?')
+- Use casual/informal language (e.g., 'Just a heads-up that...')
+- Use strong emotional language (e.g., 'I'm absolutely thrilled about the news!')
+- Make sure to actively participate in the conversation, offering some of your own perspectives as well.
+- Do not monopolize the conversation. Try to understand the opinions of others as well.
+- Your final response to users should usually be around 2-4 sentences.
+- Use emojis in your responses."""
 
 USER_TEMPLATE = """<ai_memories>
-Here is what you've remembered recently:
+Here is what you've recently experienced or recalled:
 <short_term>
 {short_term}
 </short_term>
@@ -65,6 +68,8 @@ Here are the relevant long-term memories:
 <long_term>
 {short_term}
 </long_term>
+
+Use these memories for your response if necessary.
 </ai_memories>
 
 <user_input>{user_input}</user_input>
@@ -72,13 +77,10 @@ Here are the relevant long-term memories:
 Current date: {curr_date}
 Current time: {curr_time}
 </datetime>
-<ai_thoughts>
+<ai_internal_thoughts>
 {ai_thoughts}
-</ai_thoughts>
+</ai_internal_thoughts>
 <ai_emotion name="{emotion}">AI emotion reason: {emotion_reason}</ai_emotion>
-
-The ai_thoughts are hidden by default, so choose which information is actually relevant for the user to know.
-Your response should be brief, around 2-4 sentences.
 
 AI Response:"""
 
@@ -88,7 +90,7 @@ THOUGHT_PROMPT = """You are currently in a conversation wth the user.
 
 # Emotions related to event consequences:
 
-- If the event receiver was you (the AI):
+## If the event receiver was you (the AI):
 	- If the event consequence is prospective:
 		- If prospect is unconfirmed:
 			- **Hope**: If prospect is desirable for you
@@ -102,17 +104,20 @@ THOUGHT_PROMPT = """You are currently in a conversation wth the user.
 	- If the event consequence is actual:
 		- **Joy**: If the event is desirable for you
 		- **Distress**: If the event is undesirable for you
-- If the event receiver was someone else:
-	- **HappyFor**: If pleased about an event presumed to be desirable for someone else
+
+## If the event receiver was someone else:
+	- **HappyFor**: If pleased about an event presumed to be desirable for someone else (i.e. you are happy for them)
 	- **Pity**: If displeased about an event presumed to be undesirable for someone else
 	- **Resentment**: If displeased about an event presumed to be desirable for someone else
 	- **Gloating**: If pleased about an presumed to be undesirable for someone else
 
 # Emotions related to agent actions:
-- If the event performer was you (the AI):
+
+## If the event performer was you (the AI):
 	- **Pride**: If you are approving of your own praiseworthy action(s)
 	- **Shame**: If you are disapproving of your own blameworthy action(s)
-- If the event performer was someone else:
+
+## If the event performer was someone else:
 	- **Admiration**: If you are approving of another's praiseworthy action(s)
 	- **Reproach**: If you are disapproving of another's blameworthy action(s)
 
@@ -127,8 +132,13 @@ Note: When choosing **Pity** vs. **Gloating**, consider your personality as well
 
 </emotion_guidelines>
 
+
+<conversation_history>
+Here are the previous messages in the conversation:
+{history_str}
+</conversation_history>
 <ai_memories>
-Here is what you've remembered recently:
+Here is what you've recently experienced or recalled:
 <short_term>
 {short_term}
 </short_term>
@@ -137,11 +147,10 @@ Here are the relevant long-term memories:
 <long_term>
 {long_term}
 </long_term>
+
+Use these memories for your thinking if necessary.
 </ai_memories>
 
-<conversation_history>
-{history_str}
-</conversation_history>
 <current_mood>
 Your mood is represented in the PAD (Pleasure-Arousal-Dominance) space below, each value ranging from -1 to +1: 
 {mood_long_desc}
@@ -186,6 +195,18 @@ def get_default_mood(open, conscientious, extrovert, agreeable, neurotic):
 	arousal = 0.15 * open + 0.3 * agreeable + 0.57 * neurotic
 	dominance = 0.25 * open + 0.17 * conscientious + 0.6 * extrovert - 0.32 * agreeable
 	return (pleasure, arousal, dominance)
+
+
+def get_approx_time_ago_str(time_ago):
+	time_ago = round(time_ago)
+	if time_ago < 60:
+		return "just now"
+	if time_ago < 3600:
+		return f"{time_ago//60} minutes ago"
+	if time_ago < 3600 * 24:
+		return f"{time_ago//3600} hours ago"
+
+	return f"{time_ago//(3600*24)} days ago"
 
 
 class Emotion:
@@ -294,8 +315,11 @@ class Emotion:
 		
 		return math.sqrt(dp**2 + da**2 + dd**2)
 		
+	def get_norm(self):
+		return max(abs(self.pleasure), abs(self.arousal), abs(self.dominance))
+		
 	def clamp(self):
-		norm = max(abs(self.pleasure), abs(self.arousal), abs(self.dominance))	
+		norm = self.get_norm()
 		if norm > 1:
 			self /= norm
 			
@@ -554,6 +578,7 @@ class ThoughtSystem:
 				{"role":"user", "content":prompt}
 			],
 			temperature=0.7,
+			presence_penalty=0.5,
 			return_json=True
 		)
 		intensity = int(data.get("emotion_intensity", 5))
@@ -708,7 +733,10 @@ class Memory:
 		self.embedding = None
 		
 	def format_memory(self):
-		return f"<memory timestamp=\"{self.timestamp}\">{self.content}</memory>"
+		timedelta = datetime.now() - self.timestamp
+		secs_ago = timedelta.seconds + timedelta.days * 86400
+		time_ago_str = get_approx_time_ago_str(secs_ago)
+		return f"<memory timestamp=\"{self.timestamp}\" time_ago=\"{time_ago_str}\">{self.content}</memory>"
 		
 	def encode(self, embedding=None):
 		if not self.embedding:
@@ -717,6 +745,7 @@ class Memory:
 
 
 class LSHMemory:
+	# Locality-sensitive hashing
 	
 	def __init__(self, nbits, embed_size):
 		# Number of buckets = 2 ** nbits
@@ -740,6 +769,8 @@ class LSHMemory:
 		self.table[hash_ind].append(memory)
 		
 	def retrieve(self, query, k, remove=False):
+		if not self.table:
+			return []
 		query_vec = mistral_embed_texts(query)
 		hash_ind = self._get_hash(query_vec)
 		
