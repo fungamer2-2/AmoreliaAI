@@ -12,7 +12,8 @@ Currently uses [Mistral AI](https://mistral.ai) models. To use this project, you
 2. Make sure that [Python](https://python.org) is installed
 3. Obtain a Mistral API key at <https://console.mistral.ai/>
 4. Store the API key in a `.env` file in the project directory
-5. Run `main.py`
+5. Make sure to install the requirements: `pip install -r requirements.txt` 
+6. Run `main.py`
 
 
 ## Thought system
