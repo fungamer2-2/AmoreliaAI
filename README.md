@@ -26,3 +26,6 @@ The emotion system is based on the PAD (Pleasure-Arousal-Dominance) state model.
 ## Memory system
 
 The AI companion also has a long-term memory system to recall relevant memories from previous conversations. It includes two types of memory: short-term and long-term.
+
+- Short-term memory: Memories that the AI has either experienced recently or recalled recently. This has a limited capacity, and any memories that get flushed out of short-term memory are sent to long-term memory.
+- Long term memory: Stores the memories and experiences to be retrieved whenever they become relevant. Recalled memories return to short-term memory.
