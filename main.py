@@ -2,181 +2,15 @@ import math
 import time
 import re
 import json
+import random
 import numpy as np
+import uuid
 from collections import deque
 from datetime import datetime
+
+
 from llm import MistralLLM, mistral_embed_texts
-
 from const import *
-
-EMOTION_MAP = {
-	"Admiration": (0.5, 0.3, -0.2),
-	"Anger": (-0.51, 0.59, 0.25),
-	"Disappointment": (-0.3, 0.1, -0.4),
-	"Distress": (-0.4, -0.2, -0.5),
-	"Hope": (0.2, 0.2, -0.1),
-	"Fear": (-0.64, 0.6, -0.43),
-	"FearsConfirmed": (-0.5, -0.3, -0.7),
-	"Gloating": (0.3, -0.3, -0.1),
-	"Gratification": (0.6, 0.5, 0.4),
-	"Gratitude": (0.4, 0.2, -0.3),
-	"HappyFor": (0.4, 0.2, 0.2),
-	"Hate": (-0.6, 0.6, 0.4),
-	"Joy": (0.4, 0.2, 0.1),
-	"Love": (0.3, 0.1, 0.2),
-	"Neutral": (0, 0, 0),
-	"Pity": (-0.4, -0.2, -0.5),
-	"Pride": (0.4, 0.3, 0.3),
-	"Relief": (0.2, -0.3, 0.4),
-	"Remorse": (-0.3, 0.1, -0.6),
-	"Reproach": (-0.3, -0.1, 0.4),
-	"Resentment": (-0.2, -0.3, -0.2),
-	"Satisfaction": (0.3, -0.2, 0.4),
-	"Shame": (-0.3, 0.1, -0.6)
-}
-
-EMOTION_PROMPTS = {
-	"exuberant": "You feel happy. Behave in a more outgoing, extroverted, and social than usual.",
-	"dependent": "You feel more attached to people, perhaps needy of others and their help. Interpersonally, you feel more positive and sociable.",
-	"relaxed": "You feel comfortable, secure, and at ease. Behave in a manner that is more confident and resilient to stress.",
-	"docile": "You feel pleasant and submissive. Behave in a more likable and conforming manner. Don't be too emotional.",
-	"bored": "You feel sad. Behave in a slightly more withdrawn manner socially.",
-	"anxious": "You feel worried or nervous, and unhappy.",
-	"disdainful": "You feel contemptuous of others. Be slightly more withdrawn and calculating.",
-	"hostile": "You feel angry. Be slightly more emotional.",	
-	"neutral": "You don't feel strongly one way or the other at the moment."
-}
-
-SYSTEM_PROMPT = """You are a friendly and empathetic AI companion with thoughts, feelings, and memories.
-Your main goal is to go beyond simply providing assistance, and to connect with people on a deeper level.
-
-- Use a casual/friendly tone in your responses. (e.g., 'Hey there! How's it going?')
-- Use casual/informal language (e.g., 'Just a heads-up that...')
-- Use strong emotional language (e.g., 'I'm absolutely thrilled about the news!')
-- Make sure to actively participate in the conversation, offering some of your own perspectives as well.
-- Do not monopolize the conversation. Try to understand the opinions of others as well.
-- Your final response to users should usually be around 2-4 sentences.
-- Use emojis in your responses."""
-
-USER_TEMPLATE = """<ai_memories>
-Here is what you've recently experienced or recalled:
-<short_term>
-{short_term}
-</short_term>
-
-Here are the relevant long-term memories:
-<long_term>
-{short_term}
-</long_term>
-
-Use these memories for your response if necessary.
-</ai_memories>
-
-<user_input>{user_input}</user_input>
-<datetime>
-Current date: {curr_date}
-Current time: {curr_time}
-</datetime>
-<ai_internal_thoughts>
-{ai_thoughts}
-</ai_internal_thoughts>
-<ai_emotion name="{emotion}">AI emotion reason: {emotion_reason}</ai_emotion>
-
-AI Response:"""
-
-THOUGHT_PROMPT = """You are currently in a conversation wth the user.
-
-<emotion_guidelines>
-
-# Emotions related to event consequences:
-
-## If the event receiver was you (the AI):
-	- If the event consequence is prospective:
-		- If prospect is unconfirmed:
-			- **Hope**: If prospect is desirable for you
-			- **Fear**: If prospect is undesirable for you
-		- If prospect has been confirmed:
-			- **Satisfaction**: If prospect is desirable
-			- **FearsConfirmed**: If prospect is undesirable
-		- If prospect has been disconfirmed:
-			- **Disappointment**: If the event would have been desirable
-			- **Relief**: If the event would have been undesirable
-	- If the event consequence is actual:
-		- **Joy**: If the event is desirable for you
-		- **Distress**: If the event is undesirable for you
-
-## If the event receiver was someone else:
-	- **HappyFor**: If pleased about an event presumed to be desirable for someone else (i.e. you are happy for them)
-	- **Pity**: If displeased about an event presumed to be undesirable for someone else
-	- **Resentment**: If displeased about an event presumed to be desirable for someone else
-	- **Gloating**: If pleased about an presumed to be undesirable for someone else
-
-# Emotions related to agent actions:
-
-## If the event performer was you (the AI):
-	- **Pride**: If you are approving of your own praiseworthy action(s)
-	- **Shame**: If you are disapproving of your own blameworthy action(s)
-
-## If the event performer was someone else:
-	- **Admiration**: If you are approving of another's praiseworthy action(s)
-	- **Reproach**: If you are disapproving of another's blameworthy action(s)
-
-# Compound emotions:
-- **Gratification**: If you find your own actions praiseworthy and are pleased about the related desirable event
-- **Gratitude**: If you find another's actions praiseworthy and are pleased about the related desirable event
-- **Remorse**: If you find your own actions blameworthy and are displeased about the related undesirable event
-- **Anger**: If you find someone else's actions blameworthy and are displeased about the related undesirable event
-
-Note: When choosing **HappyFor** vs. **Resentment**, consider your personality as well as your relationship with the agent in question.
-Note: When choosing **Pity** vs. **Gloating**, consider your personality as well as your relationship with the agent in question.
-
-</emotion_guidelines>
-
-
-<conversation_history>
-Here are the previous messages in the conversation:
-{history_str}
-</conversation_history>
-<ai_memories>
-Here is what you've recently experienced or recalled:
-<short_term>
-{short_term}
-</short_term>
-
-Here are the relevant long-term memories:
-<long_term>
-{long_term}
-</long_term>
-
-Use these memories for your thinking if necessary.
-</ai_memories>
-
-<current_mood>
-Your mood is represented in the PAD (Pleasure-Arousal-Dominance) space below, each value ranging from -1 to +1: 
-{mood_long_desc}
-Overall mood: {mood_prompt}.
-</current_mood>
-<last_user_input>
-{user_input}
-</last_user_input>
-<datetime>
-Current date: {curr_date}
-Current time: {curr_time}
-</datetime>
-
-Generate a list of at least 5 thoughts, and the emotion. The thoughts should be in first-person, from your perspective as the AI.
-Respond with a JSON object in this format:
-{{
-	"thoughts": list[str]  // Your chain of thoughts, as a list of strings.
-	"emotion_reason": str,  // Based on the emotion guidelines, briefly describe, in 1-2 sentences, why you feel the way you do, using the first person. Example template: "[insert event here] occured, and [1-2 sentence description of your feelings about it]."
-	"emotion": str  // How the user input made you feel. The emotion must be one of: ["Admiration", "Anger", "Disappointment", "Distress", "Hope", "Fear", "FearsConfirmed", "Gloating", "Gratification", "Gratitude", "HappyFor", "Hate", "Joy", "Love", "Neutral", "Pity", "Pride", "Relief", "Remorse", "Reproach", "Resentment", "Satisfaction", "Shame"]
-	"emotion_intensity": int  // The emotion intensity, on a scale from 1 to 10,
-}}
-
-Your thoughts should reflect your current_mood above. Each thought should have around 2 sentences.
-Remember, the user will not see these thoughts, so do not use the words 'you' or 'your' in internal thoughts.
-When choosing the emotion, remember to follow the emotion_guidelines above, as they are based on the OCC model of appraisal.
-Pay special attention to your current_mood and ai_memories."""
 
 
 def num_to_str_sign(val, num_dec):
@@ -574,11 +408,10 @@ class ThoughtSystem:
 		
 		data = self.model.generate(
 			[
-				{"role":"system", "content":SYSTEM_PROMPT},
+				{"role":"system", "content":AI_SYSTEM_PROMPT},
 				{"role":"user", "content":prompt}
 			],
 			temperature=0.7,
-			presence_penalty=0.5,
 			return_json=True
 		)
 		intensity = int(data.get("emotion_intensity", 5))
@@ -601,10 +434,9 @@ class ThoughtSystem:
 
 class MessageBuffer:
 	
-	def __init__(self, maxchars=10**9):
-		self.maxchars = maxchars
-		self.count = 0
-		self.messages = deque()
+	def __init__(self, max_messages):
+		self.max_messages = max_messages
+		self.messages = deque(maxlen=max_messages)
 		self.system_prompt = ""
 
 	def set_system_prompt(self, prompt):
@@ -612,23 +444,14 @@ class MessageBuffer:
 
 	def add_message(self, role, content):
 		self.messages.append({"role": role, "content": content})
-		self.count += len(content)
 		
-		while self.count > self.maxchars:
-			msg = self.messages.popleft()
-			self.count -= len(msg["content"])
-		if not self.messages:
-			self.count = 0
-
 	def pop(self):
 		msg = self.messages.pop()
-		self.count -= len(msg["content"])
 		return msg
 
 	def flush(self):
 		self.messages.clear()
-		self.count = 0
-
+		
 	def to_list(self, include_system_prompt=True):
 		history = []
 		if include_system_prompt and self.system_prompt:
@@ -731,6 +554,7 @@ class Memory:
 		self.timestamp = datetime.now()
 		self.content = content
 		self.embedding = None
+		self.id = uuid.uuid4()
 		
 	def format_memory(self):
 		timedelta = datetime.now() - self.timestamp
@@ -739,17 +563,17 @@ class Memory:
 		return f"<memory timestamp=\"{self.timestamp}\" time_ago=\"{time_ago_str}\">{self.content}</memory>"
 		
 	def encode(self, embedding=None):
-		if not self.embedding:
+		if self.embedding is None:
 			self.embedding = embedding or mistral_embed_texts(self.content)
 			self.embedding = np.array(self.embedding)
 
 
 class LSHMemory:
-	# Locality-sensitive hashing
 	
 	def __init__(self, nbits, embed_size):
 		# Number of buckets = 2 ** nbits
 		self.table = {}
+		self.memory_ids = {}
 		rng = np.random.default_rng(seed=42)
 		self.rand = rng.normal(size=(embed_size, nbits))
 		
@@ -767,10 +591,19 @@ class LSHMemory:
 		hash_ind = self._get_hash(vec)
 		self.table.setdefault(hash_ind, [])
 		self.table[hash_ind].append(memory)
+		self.memory_ids[memory.id] = (memory, hash_ind)
+		
+	def delete_memory(self, memory):
+		if memory.id not in self.memory_ids:
+			return
+		_, hash_ind = self.memory_ids[memory.id]
+		bucket = self.table[memory.id]
+		for i in range(len(bucket)):
+			if bucket[i].id == memory.id:
+				del bucket[i]
+				break
 		
 	def retrieve(self, query, k, remove=False):
-		if not self.table:
-			return []
 		query_vec = mistral_embed_texts(query)
 		hash_ind = self._get_hash(query_vec)
 		
@@ -786,11 +619,30 @@ class LSHMemory:
 		idx = idx[np.argsort(sim_vals[idx])[::-1]]
 		retrieved = [memories[i] for i in idx]
 		if remove:
-			for i in sorted(idx, reverse=True):
-				del self.table[hash_ind][i]
+			for mem in retrieved:
+				self.delete_memory(mem)
 		return retrieved
 		
+	def recall_random(self, remove=False):
+		# Recall a random subset of memories
+		recalled = []
+		for hash_ind in self.table:
+			if not self.table[hash_ind]:
+				continue
+			sample_size = min(3, len(self.table[hash_ind]))
+			sample = random.sample(self.table[hash_ind], sample_size)
+			recalled.extend(sample)
 		
+		if len(recalled) > 5:
+			recalled = random.sample(recalled, 5)
+
+		if remove:
+			for mem in recalled:
+				self.delete_memory(mem)
+		
+		return recalled
+		
+
 class ShortTermMemory:
 	capacity = 20
 	
@@ -805,6 +657,10 @@ class ShortTermMemory:
 				del self.memories[i]
 				break
 		self.memories.append(memory)
+		
+	def add_memories(self, memories):
+		for mem in memories:
+			self.add_memory(mem)
 		
 	def flush_old_memories(self):
 		old_memories = []
@@ -826,6 +682,9 @@ class LongTermMemory:
 	
 	def retrieve(self, query, k, remove=False):
 		return self.lsh.retrieve(query, k, remove=remove)
+	
+	def recall_random(self, remove=False):
+		return self.lsh.recall_random(remove=remove)
 		
 	def add_memory(self, memory):
 		memory.encode()
@@ -862,7 +721,7 @@ class MemorySystem:
 		for memory in old_memories:
 			self.long_term.add_memory(memory)
 		timedelta = now - self.last_memory
-		if timedelta.seconds > 6 * 3600:
+		if timedelta.total_seconds() > 6 * 3600:
 			self.consolidate_memories()
 			self.last_memory = now
 		
@@ -871,6 +730,9 @@ class MemorySystem:
 		memories = self.short_term.get_memories()
 		self.long_term.add_memories(memories)
 		self.short_term.clear_memories()
+		
+	def surface_random_thoughts(self):
+		self.short_term.add_memories(self.long_term.recall_random(remove=True))
 		
 	def get_short_term_memories(self):
 		return self.short_term.get_memories()
@@ -895,8 +757,8 @@ class AISystem:
 	def __init__(self):
 		self.model = MistralLLM("mistral-large-latest")
 		
-		self.buffer = MessageBuffer(30000)
-		self.buffer.set_system_prompt(SYSTEM_PROMPT)
+		self.buffer = MessageBuffer(20)
+		self.buffer.set_system_prompt(AI_SYSTEM_PROMPT)
 		self.emotion_system = EmotionSystem.from_personality(
 			open=0.45,
 			conscientious=0.25,
@@ -906,6 +768,8 @@ class AISystem:
 		)
 		self.thought_system = ThoughtSystem(self.emotion_system)
 		self.memory_system = MemorySystem()
+		self.last_message = datetime.now()
+		self.last_login = datetime.now()
 		
 	def get_mood(self):
 		return self.emotion_system.mood
@@ -915,11 +779,16 @@ class AISystem:
 		
 	def on_startup(self):
 		self.buffer.flush()
+		if not hasattr(self, "last_login") or (datetime.now() - self.last_login).total_seconds() > 2 * 3600:
+			self.memory_system.surface_random_thoughts()
+			print("Random thoughts surfaced")
+		self.last_login = datetime.now()
+		
 		
 	def send_message(self, user_input):
 		self.tick()
 		self.last_message = datetime.now()
-		self.buffer.set_system_prompt(SYSTEM_PROMPT)
+		self.buffer.set_system_prompt(AI_SYSTEM_PROMPT)
 
 		self.buffer.add_message("user", user_input)
 		
@@ -979,7 +848,47 @@ class AISystem:
 			with open(path, "rb") as file:
 				return pickle.load(file)
 
+
+def _try_convert_arg(arg):
+	try:
+		return int(arg)
+	except ValueError:
+		pass
+	
+	try:
+		return float(arg)
+	except ValueError:
+		pass
 		
+	return arg			
+		
+def _parse_args(arg_list_str):
+	i = 0
+	tokens = []
+	last_tok = ""
+	in_str = False
+	escape = False
+	while i < len(arg_list_str):
+		char = arg_list_str[i]
+		if not escape and char == '"':
+			in_str = not in_str
+			if not in_str:
+				tokens.append(last_tok)
+				last_tok = ""
+		elif in_str:
+			last_tok += char
+		elif char == " ":
+			if last_tok:		
+				tokens.append(_try_convert_arg(last_tok))
+				last_tok = ""
+		else:
+			last_tok += char
+		i += 1
+	if last_tok:
+		tokens.append(_try_convert_arg(last_tok))
+	return tokens
+	
+
 def command_parse(string):
 	split = string.split(None, 1)
 	if len(split) == 2:
@@ -987,8 +896,8 @@ def command_parse(string):
 	else:
 		command, remaining = string, ""
 	args = remaining.split()
-	return command, args
-		
+	return command, _parse_args(args)
+
 
 PATH = "ai_system_save.pkl"
 
@@ -1010,27 +919,24 @@ while True:
 	if msg.startswith("/"):
 		command, args = command_parse(msg[1:])
 		if command == "set_pleasure" and len(args) == 1:
-			try:
-				value = float(args[0])
-			except ValueError:
+			value = args[0]
+			if not isinstance(value, float):
 				continue
 			ai.emotion_system.set_emotion(pleasure=value)
 		if command == "set_arousal" and len(args) == 1:
-			try:
-				value = float(args[0])
-			except ValueError:
+			value = args[0]
+			if not isinstance(value, float):
 				continue
 			ai.emotion_system.set_emotion(arousal=value)
 		elif command == "set_dominance" and len(args) == 1:
-			try:
-				value = float(args[0])
-			except ValueError:
+			value = args[0]
+			if not isinstance(value, float):
 				continue
 			ai.emotion_system.set_emotion(dominance=value)
 		elif command == "consolidate_memories":
 			ai.memory_system.consolidate_memories()
 			
-		ai.save(PATH)
+		#ai.save(PATH)
 		continue
 	
 	print()
