@@ -7,7 +7,7 @@ PERSONALITY_INTENSITY_FACTOR = 0.3
 LSH_VEC_DIM = 1024
 LSH_NUM_BITS = 2
 
-MEMORY_DECAY_TIME_MULT = 1.75
+MEMORY_DECAY_TIME_MULT = 1.5
 
 EMOTION_MAP = {
 	"Admiration": (0.5, 0.3, -0.2),
@@ -148,6 +148,7 @@ Respond with a JSON object in this format:
 	"emotion_reason": str,  // Based on the emotion guidelines, briefly describe, in 1-2 sentences, why you feel the way you do, using the first person. Example template: "[insert event here] occured, and [1-2 sentence description of your feelings about it]."
 	"emotion": str  // How the user input made you feel. The emotion must be one of the emotions from the emotion_guidelines
 	"emotion_intensity": int  // The emotion intensity, on a scale from 1 to 10,
+	"insights": list[str]  // If you gained any important insights from chatting with the user, put them here. If there is nothing important to return, return an empty list (`[]`) corresponding to the `insights` key.
 }}
 
 Your thoughts should reflect your current_mood above. Each thought should have around 2 sentences.

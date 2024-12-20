@@ -140,21 +140,21 @@ class Memory:
 		self.embedding = None
 		self.id = str(uuid.uuid4())
 		self.strength = 0	
-	
+
 	def get_recency_factor(self):
 		seconds = (datetime.now() - self.last_accessed).total_seconds()
 		days = seconds / 86400
 		return math.exp(-days / ((self.strength + 1) * MEMORY_DECAY_TIME_MULT))
-		
+
 	def reinforce(self): 
 		self.strength += 0.5
 		self.last_accessed = datetime.now()
-		
+
 	def format_memory(self):
 		timedelta = datetime.now() - self.timestamp
 		time_ago_str = get_approx_time_ago_str(timedelta)
 		return f"<memory timestamp=\"{self.timestamp}\" time_ago=\"{time_ago_str}\">{self.content}</memory>"
-		
+
 	def encode(self, embedding=None):
 		if self.embedding is None:
 			self.embedding = embedding or mistral_embed_texts(self.content)
@@ -383,10 +383,12 @@ class ThoughtSystem:
 	
 	def __init__(
 		self,
-		emotion_system
+		emotion_system,
+		memory_system
 	):
 		self.model = MistralLLM("mistral-large-latest")
 		self.emotion_system = emotion_system
+		self.memory_system = memory_system
 		self.show_thoughts = True
 		
 	def think(
@@ -449,8 +451,16 @@ class ThoughtSystem:
 			for thought in data["thoughts"]:
 				print(f"- {thought}")
 			print()
+		
 		print(f"Emotion: {data['emotion']}, intensity {intensity}/10")
 		print(f"Emotion reason: {data['emotion_reason']}")
+		
+		if data["insights"]:
+			# Add new insights gained into memory
+			print("Insights gained:")
+			for insight in data["insights"]:
+				print(f"- {insight}")
+				self.memory_system.remember(f"I gained an insight while chatting with the user: {insight}")
 		return data
 
 
@@ -466,9 +476,10 @@ class AISystem:
 			neurotic=-0.15
 		)
 		
-		self.emotion_system = EmotionSystem(self.personality_system)
-		self.thought_system = ThoughtSystem(self.emotion_system)
 		self.memory_system = MemorySystem()
+		self.emotion_system = EmotionSystem(self.personality_system)
+		self.thought_system = ThoughtSystem(self.emotion_system, self.memory_system)
+		
 		self.last_message = datetime.now()
 		self.last_login = None
 		
@@ -608,11 +619,6 @@ def command_parse(string):
 	args = remaining.split()
 	return command, _parse_args(args)
 
-"""
-TODO
-- Allow the AI to reflect on its memories to form a higher-level understanding
-- Memories that decay below a threshold have a chance to be forgotten
-"""
 
 PATH = "ai_system_save.pkl"
 
