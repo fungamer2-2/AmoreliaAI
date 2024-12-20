@@ -20,13 +20,15 @@ Currently uses [Mistral AI](https://mistral.ai) models. To use this project, you
 
 Before responding, the AI is prompted to generate a list of thoughts from its perspective. This helps make it a bit more realistic, and think as if it truly had its own personality.
 
+Additionally, the AI is designed to look for and gather insights to add to its memory, in order to gain a higher-level understanding of the user.
+
 ## Emotion system
 
 The emotion system is based on the PAD (Pleasure-Arousal-Dominance) state model. Interactions with the AI will elicit emotions, which affect its mood. Its current emotions may affect its responses.
 
 ## Memory system
 
-The AI companion also has a long-term memory system to recall relevant memories from previous conversations. It includes two types of memory: short-term and long-term.
+The AI companion also has a long-term memory system to recall relevant memories and insights from previous conversations. It includes two types of memory: short-term and long-term.
 
-- Short-term memory: Memories that the AI has either experienced recently or recalled recently. This has a limited capacity, and any memories that get flushed out of short-term memory are sent to long-term memory.
+- Short-term memory: Memories that the AI has either experienced recently or recalled recently. This is always available in-context, but has a limited capacity, and any memories that get flushed out of short-term memory are sent to long-term memory.
 - Long term memory: Stores the memories and experiences to be retrieved whenever they become relevant. Recalled memories return to short-term memory.
