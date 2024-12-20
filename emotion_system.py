@@ -3,6 +3,7 @@ import time
 from datetime import datetime
 from const import *
 from utils import num_to_str_sign
+from llm import MistralLLM
 
 
 def get_default_mood(open, conscientious, extrovert, agreeable, neurotic):
@@ -10,7 +11,48 @@ def get_default_mood(open, conscientious, extrovert, agreeable, neurotic):
 	arousal = 0.15 * open + 0.3 * agreeable + 0.57 * neurotic
 	dominance = 0.25 * open + 0.17 * conscientious + 0.6 * extrovert - 0.32 * agreeable
 	return (pleasure, arousal, dominance)
+	
 
+def summarize_personality(open, conscientious, extrovert, agreeable, neurotic):
+	model = MistralLLM("mistral-small-latest")
+	personality_str = "\n".join([
+		f"Openness: {num_to_str_sign(open, 2)}",
+		f"Conscientiousness: {num_to_str_sign(conscientious, 2)}",
+		f"Extroversion: {num_to_str_sign(extrovert, 2)}",
+		f"Agreeableness: {num_to_str_sign(agreeable, 2)}",
+		f"Neuroticism: {num_to_str_sign(neurotic, 2)}"
+	])
+	prompt = SUMMARIZE_PERSONALITY.format(
+		personality_values=personality_str
+	)
+	return model.generate(
+		prompt,
+		temperature=0.1
+	)
+
+
+class PersonalitySystem:
+	
+	def __init__(self, open, conscientious, extrovert, agreeable, neurotic):
+		self.open = open
+		self.conscientious = conscientious
+		self.extrovert = extrovert
+		self.agreeable = agreeable
+		self.neurotic = neurotic
+		
+	
+		self.summary = ""
+		
+	def get_summary(self):
+		if not self.summary:
+			self.summary = summarize_personality(
+				self.open,
+				self.conscientious,
+				self.extrovert,
+				self.agreeable,
+				self.neurotic
+			)
+		return self.summary
 
 class Emotion:
 	
@@ -146,8 +188,14 @@ class Emotion:
 
 class EmotionSystem:
 	
-	def __init__(self, pleasure, arousal, dominance):
-		base_mood = Emotion(pleasure, arousal, dominance)		
+	def __init__(self, personality_system):
+		base_mood = Emotion.from_personality(
+			personality_system.open,
+			personality_system.conscientious,
+			personality_system.extrovert,
+			personality_system.agreeable,
+			personality_system.neurotic
+		)		
 		self.base_mood = base_mood
 		self.reset_mood()
 		self.last_update = time.time()
@@ -196,9 +244,6 @@ class EmotionSystem:
 		mood = self.mood
 		print(self.get_mood_long_description())
 		
-	@classmethod
-	def from_personality(cls, open, conscientious, extrovert, agreeable, neurotic):
-		return cls(*get_default_mood(open, conscientious, extrovert, agreeable, neurotic))
 
 	def get_mood_name(self):
 		mood = self.mood
@@ -297,6 +342,7 @@ class EmotionSystem:
 		now = datetime.now()
 		hour = now.hour + now.minute / 60 + now.second / 3600
 		
+		# The energy level is likely to be higher during the day and lower at nighttime
 		shift = 2
 		
 		energy_cycle = -math.cos(math.pi * (hour - shift) / 12)
@@ -335,4 +381,5 @@ class EmotionSystem:
 			return
 		
 		self._tick_mood_decay(t)
-	
+		
+		

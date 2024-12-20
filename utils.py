@@ -10,7 +10,7 @@ def num_to_str_sign(val, num_dec):
 
 
 def get_approx_time_ago_str(timedelta):
-	secs = timedelta.total_seconds()
+	secs = int(timedelta.total_seconds())
 	if secs < 60:
 		return "just now"		
 	minutes = secs // 60

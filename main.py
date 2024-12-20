@@ -3,14 +3,17 @@ import re
 import random
 import numpy as np
 import uuid
+import math
 from collections import deque
 from datetime import datetime
 
 from llm import MistralLLM, mistral_embed_texts
-from emotion_system import Emotion, EmotionSystem
+from emotion_system import Emotion, EmotionSystem, PersonalitySystem
 
 from const import *
-from utils import get_approx_time_ago_str
+from utils import get_approx_time_ago_str, num_to_str_sign
+from rank_bm25 import BM25Okapi
+
 
 class MessageBuffer:
 	
@@ -57,7 +60,6 @@ Return a JSON obiect in the format:
 Below is the memory you are to rate:
 <memory>{memory}</memory>"""
 
-
 def rate_importance(memory):
 	model = MistralLLM("open-mistral-nemo")
 	prompt = IMPORTANCE_PROMPT.format(memory=memory)
@@ -68,7 +70,7 @@ def rate_importance(memory):
 	)
 	return data.get("importance", 3)
 	
-	
+
 def normalize_text(text):			
 	text = text.lower()
 	for symbol in ".,:;!?":
@@ -131,10 +133,22 @@ def normalize_text(text):
 class Memory:
 	
 	def __init__(self, content):
-		self.timestamp = datetime.now()
+		now = datetime.now()
+		self.timestamp = now
+		self.last_accessed = now
 		self.content = content
 		self.embedding = None
 		self.id = str(uuid.uuid4())
+		self.strength = 0	
+	
+	def get_recency_factor(self):
+		seconds = (datetime.now() - self.last_accessed).total_seconds()
+		days = seconds / 86400
+		return math.exp(-days / ((self.strength + 1) * MEMORY_DECAY_TIME_MULT))
+		
+	def reinforce(self): 
+		self.strength += 0.5
+		self.last_accessed = datetime.now()
 		
 	def format_memory(self):
 		timedelta = datetime.now() - self.timestamp
@@ -194,8 +208,13 @@ class LSHMemory:
 		result_vecs = np.stack([mem.embedding for mem in memories])
 		sim_vals = (query_vec @ result_vecs.T)
 		sim_vals /= np.linalg.norm(query_vec) * np.linalg.norm(result_vecs, axis=1)
-		idx = np.argpartition(sim_vals, -k)[-k:]
-		idx = idx[np.argsort(sim_vals[idx])[::-1]]
+		
+		recency_vals = np.array([mem.get_recency_factor() for mem in memories])
+		
+		scores = sim_values + recency_vals
+		
+		idx = np.argpartition(scores, -k)[-k:]
+		idx = idx[np.argsort(scores[idx])[::-1]]
 		retrieved = [memories[i] for i in idx]
 		if remove:
 			for mem in retrieved:
@@ -220,7 +239,7 @@ class LSHMemory:
 				self.delete_memory(mem)
 		
 		return recalled
-		
+
 
 class ShortTermMemory:
 	capacity = 20
@@ -231,11 +250,12 @@ class ShortTermMemory:
 		self.memories = deque()
 		
 	def add_memory(self, memory):
-		for i, mem in enumerate(self.memories):
-			if mem.content == memory.content:
-				del self.memories[i]
-				break
-		self.memories.append(memory)
+		self.memories.append(memory) 
+		
+	def move_to_end(self, memory):
+		if memory in self.memories:
+			self.memories.remove(memory)
+			self.memories.append(memory)
 		
 	def add_memories(self, memories):
 		for mem in memories:
@@ -252,6 +272,25 @@ class ShortTermMemory:
 		
 	def get_memories(self):
 		return list(self.memories)
+		
+	def reinforce(self, query):
+		if not self.memories:
+			return
+		
+		# Similar memories are more likely to be rehearsed
+		corpus = [memory.content for memory in self.memories]
+		tokenized_corpus = [normalize_text(text).split() for text in corpus]
+		bm25 = BM25Okapi(tokenized_corpus)
+		scores = bm25.get_scores(normalize_text(query).split())
+		
+		reinforced = []
+		for mem, score in zip(self.memories, scores):
+			if random.random() < score:
+				reinforced.append((score, mem))
+		reinforced.sort(key=lambda p: p[0])
+		for _, mem in reinforced:
+			mem.reinforce()
+			self.move_to_end(mem)
 
 		
 class LongTermMemory:
@@ -275,6 +314,9 @@ class LongTermMemory:
 		for memory, embed in zip(memories, embeddings):
 			memory.encode(embed)
 			self.lsh.add_memory(memory)
+			
+	def get_memories(self):
+		return self.lsh.get_memories()
 
 
 class MemorySystem:
@@ -289,8 +331,10 @@ class MemorySystem:
 		self.short_term.add_memory(Memory(content))
 		
 	def recall(self, query):
+		self.short_term.reinforce(query)
 		memories = self.long_term.retrieve(query, 3, remove=True)
 		for mem in memories:
+			mem.reinforce()
 			self.short_term.add_memory(mem)
 		return memories
 		
@@ -301,6 +345,7 @@ class MemorySystem:
 			self.long_term.add_memory(memory)
 		timedelta = now - self.last_memory
 		if timedelta.total_seconds() > 6 * 3600:
+			# Consolidate memories after 6 hours of inactivity
 			self.consolidate_memories()
 			self.last_memory = now
 		
@@ -311,7 +356,10 @@ class MemorySystem:
 		self.short_term.clear_memories()
 		
 	def surface_random_thoughts(self):
-		self.short_term.add_memories(self.long_term.recall_random(remove=True))
+		memories = self.long_term.recall_random(remove=True)
+		for mem in memories:
+			mem.reinforce()
+		self.short_term.add_memories(memories)
 		
 	def get_short_term_memories(self):
 		return self.short_term.get_memories()
@@ -337,7 +385,7 @@ class ThoughtSystem:
 		self,
 		emotion_system
 	):
-		self.model = MistralLLM("mistral-small-latest")
+		self.model = MistralLLM("mistral-large-latest")
 		self.emotion_system = emotion_system
 		self.show_thoughts = True
 		
@@ -381,6 +429,14 @@ class ThoughtSystem:
 			return_json=True
 		)
 		intensity = int(data.get("emotion_intensity", 5))
+		emotion = data["emotion"]
+		
+		if emotion not in EMOTION_MAP:
+			for em in EMOTION_MAP:
+				if em.lower() == emotion.lower():
+					data["emotion"] = em
+					break
+		
 		data["emotion_intensity"] = intensity
 		
 		self.emotion_system.experience_emotion(
@@ -401,21 +457,27 @@ class ThoughtSystem:
 class AISystem:
 
 	def __init__(self):
-		self.model = MistralLLM("mistral-small-latest")
-		
-		self.buffer = MessageBuffer(20)
-		self.buffer.set_system_prompt(AI_SYSTEM_PROMPT)
-		self.emotion_system = EmotionSystem.from_personality(
+		self.model = MistralLLM("mistral-large-latest")
+		self.personality_system = PersonalitySystem(
 			open=0.45,
 			conscientious=0.25,
 			extrovert=0.18,
 			agreeable=0.93,
 			neurotic=-0.15
 		)
+		
+		self.emotion_system = EmotionSystem(self.personality_system)
 		self.thought_system = ThoughtSystem(self.emotion_system)
 		self.memory_system = MemorySystem()
 		self.last_message = datetime.now()
 		self.last_login = None
+		
+		self.buffer = MessageBuffer(20)
+		self.buffer.set_system_prompt(self.get_system_prompt())
+		
+	def get_system_prompt(self):
+		prompt = AI_SYSTEM_PROMPT + "\n\nYour Personality Description: " + self.personality_system.get_summary()
+		return prompt
 		
 	def get_mood(self):
 		return self.emotion_system.mood
@@ -427,14 +489,12 @@ class AISystem:
 		self.buffer.flush()
 		if self.last_login is None:
 			self.buffer.add_message("user", "[The user has logged in for the first time]")
-		
-		self.last_login = datetime.now()
-		
+		self.last_login = datetime.now()	
 		
 	def send_message(self, user_input):
 		self.tick()
 		self.last_message = datetime.now()
-		self.buffer.set_system_prompt(AI_SYSTEM_PROMPT)
+		self.buffer.set_system_prompt(self.get_system_prompt())
 
 		self.buffer.add_message("user", user_input)
 		
@@ -549,8 +609,9 @@ def command_parse(string):
 	return command, _parse_args(args)
 
 """
-Roadmap:
+TODO
 - Allow the AI to reflect on its memories to form a higher-level understanding
+- Memories that decay below a threshold have a chance to be forgotten
 """
 
 PATH = "ai_system_save.pkl"

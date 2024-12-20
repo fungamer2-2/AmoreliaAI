@@ -7,6 +7,8 @@ PERSONALITY_INTENSITY_FACTOR = 0.3
 LSH_VEC_DIM = 1024
 LSH_NUM_BITS = 2
 
+MEMORY_DECAY_TIME_MULT = 1.75
+
 EMOTION_MAP = {
 	"Admiration": (0.5, 0.3, -0.2),
 	"Anger": (-0.51, 0.59, 0.25),
@@ -143,7 +145,7 @@ Generate a list of at least 5 thoughts, and the emotion. The thoughts should be 
 Respond with a JSON object in this format:
 {{
 	"thoughts": list[str]  // Your chain of thoughts, as a list of strings.
-	"emotion_reason": str,  // Based on the emotion guidelines, briefly describe, in 1-2 sentences, why you feel the way you do, using the first person. Example template: "[insert event here] occured, and [1-2 sentence description of your feelings about it]. [Another sentence of how this relates to the emotion guidelines, for example, 'This is something good that happened to me, so I feel joy', or, 'The possibility of something good happening makes me feel hopeful', etc.]"
+	"emotion_reason": str,  // Based on the emotion guidelines, briefly describe, in 1-2 sentences, why you feel the way you do, using the first person. Example template: "[insert event here] occured, and [1-2 sentence description of your feelings about it]."
 	"emotion": str  // How the user input made you feel. The emotion must be one of the emotions from the emotion_guidelines
 	"emotion_intensity": int  // The emotion intensity, on a scale from 1 to 10,
 }}
@@ -151,5 +153,15 @@ Respond with a JSON object in this format:
 Your thoughts should reflect your current_mood above. Each thought should have around 2 sentences.
 Remember, the user will not see these thoughts, so do not use the words 'you' or 'your' in internal thoughts.
 When choosing the emotion, remember to follow the emotion_guidelines above, as they are based on the OCC model of appraisal.
-Pay special attention to your current_mood and ai_memories."""
+Pay special attention to your current_mood, ai_memories, and your personality description."""
+
+SUMMARIZE_PERSONALITY = """Summarize the personality of a character with the following trait values.
+Each trait ranges from -1.0 to +1.0, where +0.0 is neutral/in the middle.
+
+<trait_values>
+{personality_values}
+</trait_values>
+
+Concise Personality Summary Paragraph:"""
+
 
