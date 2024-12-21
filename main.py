@@ -196,7 +196,7 @@ class LSHMemory:
 				del bucket[i]
 				break
 		
-	def retrieve(self, query, k, remove=False):
+	def retriuheve(self, query, k, remove=False):
 		query_vec = mistral_embed_texts(query)
 		hash_ind = self._get_hash(query_vec)
 		
@@ -517,12 +517,12 @@ class AISystem:
 		short_term_memories, long_term_memories = self.memory_system.retrieve_memories(history)
 		short_term = "\n".join(mem.format_memory() for mem in short_term_memories)
 		long_term = "\n".join(mem.format_memory() for mem in long_term_memories)
-		print("Short term:")
-		print(short_term)
-		print()
-		print("Long term:")
-		print(long_term)
-		print()
+		#print("Short term:")
+#		print(short_term)
+#		print()
+#		print("Long term:")
+#		print(long_term)
+#		print()
 		thought_data = self.thought_system.think(
 			self.buffer.to_list(False),
 			short_term_memories,
