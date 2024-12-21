@@ -211,7 +211,7 @@ class LSHMemory:
 		
 		recency_vals = np.array([mem.get_recency_factor() for mem in memories])
 		
-		scores = sim_values + recency_vals
+		scores = sim_vals + recency_vals
 		
 		idx = np.argpartition(scores, -k)[-k:]
 		idx = idx[np.argsort(scores[idx])[::-1]]
@@ -273,7 +273,7 @@ class ShortTermMemory:
 	def get_memories(self):
 		return list(self.memories)
 		
-	def reinforce(self, query):
+	def rehearse(self, query):
 		if not self.memories:
 			return
 		
@@ -288,6 +288,7 @@ class ShortTermMemory:
 			if random.random() < score:
 				reinforced.append((score, mem))
 		reinforced.sort(key=lambda p: p[0])
+		reinforced = reinforced[-3:]
 		for _, mem in reinforced:
 			mem.reinforce()
 			self.move_to_end(mem)
@@ -331,7 +332,7 @@ class MemorySystem:
 		self.short_term.add_memory(Memory(content))
 		
 	def recall(self, query):
-		self.short_term.reinforce(query)
+		self.short_term.rehearse(query)
 		memories = self.long_term.retrieve(query, 3, remove=True)
 		for mem in memories:
 			mem.reinforce()
@@ -663,5 +664,7 @@ while True:
 		continue
 	
 	print()
-	print("AI: " + ai.send_message(msg))
+	message = ai.send_message(msg)
 	ai.save(PATH)
+	print("AI: " + message)
+	
