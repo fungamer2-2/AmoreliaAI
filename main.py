@@ -196,7 +196,7 @@ class LSHMemory:
 				del bucket[i]
 				break
 		
-	def retriuheve(self, query, k, remove=False):
+	def retrieve(self, query, k, remove=False):
 		query_vec = mistral_embed_texts(query)
 		hash_ind = self._get_hash(query_vec)
 		
