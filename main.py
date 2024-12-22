@@ -412,6 +412,11 @@ class ThoughtSystem:
 		short_term = "\n".join(mem.format_memory() for mem in short_term_memories)
 		long_term = "\n".join(mem.format_memory() for mem in long_term_memories)
 		
+		#print("Short-term:")
+#		print(short_term + "\n")
+#		print("Long-term")
+#		print(long_term)
+		
 		prompt = THOUGHT_PROMPT.format(
 			history_str=history_str,
 			user_input=messages[-1]["content"],
@@ -453,8 +458,8 @@ class ThoughtSystem:
 				print(f"- {thought}")
 			print()
 		
-		print(f"Emotion: {data['emotion']}, intensity {intensity}/10")
-		print(f"Emotion reason: {data['emotion_reason']}")
+#			print(f"Emotion: {data['emotion']}, intensity {intensity}/10")
+#			print(f"Emotion reason: {data['emotion_reason']}")
 		
 		if data["insights"]:
 			# Add new insights gained into memory
@@ -630,6 +635,7 @@ else:
 	ai = AISystem()
 
 ai.on_startup()
+
 while True:
 	ai.tick()
 	

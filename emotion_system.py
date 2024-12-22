@@ -40,7 +40,6 @@ class PersonalitySystem:
 		self.agreeable = agreeable
 		self.neurotic = neurotic
 		
-	
 		self.summary = ""
 		
 	def get_summary(self):
@@ -53,6 +52,7 @@ class PersonalitySystem:
 				self.neurotic
 			)
 		return self.summary
+		
 
 class Emotion:
 	

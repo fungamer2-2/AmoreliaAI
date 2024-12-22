@@ -124,14 +124,16 @@ Here are the memories that have just been brought to mind:
 
 Use these memories for your thinking if necessary.
 </ai_memories>
-<conversation_history>
-Here are the previous messages in the conversation:
+
+<current_conversation_history>
+Here are the previous messages in the current conversation:
+
 {history_str}
-</conversation_history>
+</current_conversation_history>
 <current_mood>
 Your mood is represented in the PAD (Pleasure-Arousal-Dominance) space below, each value ranging from -1 to +1: 
 {mood_long_desc}
-Overall mood: {mood_prompt}.
+Overall mood: {mood_prompt}
 </current_mood>
 <last_user_input>
 {user_input}
@@ -148,16 +150,16 @@ Respond with a JSON object in this format:
 	"emotion_reason": str,  // Based on the emotion guidelines, briefly describe, in 1-2 sentences, why you feel the way you do, using the first person. Example template: "[insert event here] occured, and [1-2 sentence description of your feelings about it]."
 	"emotion": str  // How the user input made you feel. The emotion must be one of the emotions from the emotion_guidelines
 	"emotion_intensity": int  // The emotion intensity, on a scale from 1 to 10,
-	"insights": list[str]  // If you gained any important insights from chatting with the user, put them here. If there is nothing important to return, return an empty list (`[]`) corresponding to the `insights` key.
+	"insights": list[str]  // If you gained any high-level insights from chatting with the user, put them here. Do not repeat insights that have already been made. If there is nothing important to return, return an empty list (`[]`) corresponding to the `insights` key.
 }}
 
 Your thoughts should reflect your current_mood above. Each thought should have around 2 sentences.
 Remember, the user will not see these thoughts, so do not use the words 'you' or 'your' in internal thoughts.
 When choosing the emotion, remember to follow the emotion_guidelines above, as they are based on the OCC model of appraisal.
-Pay special attention to your current_mood, ai_memories, and your personality description."""
+Pay special attention to your current_mood and ai_memories"""
 
 SUMMARIZE_PERSONALITY = """Summarize the personality of a character with the following trait values.
-Each trait ranges from -1.0 to +1.0, where +0.0 is neutral/in the middle.
+Each trait value ranges from -1.0 to +1.0, where +0.0 is neutral/in the middle.
 
 <trait_values>
 {personality_values}
