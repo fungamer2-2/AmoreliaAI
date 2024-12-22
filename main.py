@@ -145,14 +145,26 @@ class Memory:
 		seconds = (datetime.now() - self.last_accessed).total_seconds()
 		days = seconds / 86400
 		return math.exp(-days / ((self.strength + 1) * MEMORY_DECAY_TIME_MULT))
+	
+	def get_retention_prob(self):
+		# The probability of retaining this memory per 24 hours
+		recency = self.get_recency_factor()
+		threshold = 0.6
+		if recency > threshold:
+			return 1.0
+		return math.exp(-1 / (MEMORY_DECAY_TIME_MULT * (self.strength + 1)))
 
 	def reinforce(self): 
-		self.strength += 0.5
+		self.strength += 1
 		self.last_accessed = datetime.now()
 
-	def format_memory(self):
+	def format_memory(self, debug=False):
 		timedelta = datetime.now() - self.timestamp
 		time_ago_str = get_approx_time_ago_str(timedelta)
+		if debug:
+			strength = self.strength
+			return f"<memory timestamp=\"{self.timestamp}\" time_ago=\"{time_ago_str}\" strength=\"{strength}\">{self.content}</memory>"
+
 		return f"<memory timestamp=\"{self.timestamp}\" time_ago=\"{time_ago_str}\">{self.content}</memory>"
 
 	def encode(self, embedding=None):
@@ -221,6 +233,12 @@ class LSHMemory:
 				self.delete_memory(mem)
 		return retrieved
 		
+	def get_memories(self):
+		memories = []
+		for bucket in self.table.values():
+			memories.extend(bucket)
+		return memories
+	
 	def recall_random(self, remove=False):
 		# Recall a random subset of memories
 		recalled = []
@@ -318,7 +336,21 @@ class LongTermMemory:
 			
 	def get_memories(self):
 		return self.lsh.get_memories()
-
+	
+	def forget_memory(self, memory):
+		self.lsh.delete_memory(memory)
+		
+	def tick(self, dt):
+		for mem in self.get_memories():
+			retain_prob = mem.get_retention_prob()
+			if retain_prob >= 1.0:
+				continue	
+			prob = 1 - ((1 - retain_prob) ** (dt / 86400))	
+			if random.random() > prob:
+				print("Forgot memory because it has not been recalled in a while.")
+				print(f"Forgotten memory content: {memory.content}")
+				self.forget_memory(memory)
+	
 
 class MemorySystem:
 	
@@ -339,7 +371,7 @@ class MemorySystem:
 			self.short_term.add_memory(mem)
 		return memories
 		
-	def tick(self):
+	def tick(self, dt):
 		now = datetime.now() 
 		old_memories = self.short_term.flush_old_memories()
 		for memory in old_memories:
@@ -349,6 +381,8 @@ class MemorySystem:
 			# Consolidate memories after 6 hours of inactivity
 			self.consolidate_memories()
 			self.last_memory = now
+		
+		self.long_term.tick(dt)
 		
 	def consolidate_memories(self):
 		print("Consolidating all memories...")
@@ -412,10 +446,7 @@ class ThoughtSystem:
 		short_term = "\n".join(mem.format_memory() for mem in short_term_memories)
 		long_term = "\n".join(mem.format_memory() for mem in long_term_memories)
 		
-		#print("Short-term:")
-#		print(short_term + "\n")
-#		print("Long-term")
-#		print(long_term)
+		
 		
 		prompt = THOUGHT_PROMPT.format(
 			history_str=history_str,
@@ -488,6 +519,7 @@ class AISystem:
 		
 		self.last_message = datetime.now()
 		self.last_login = None
+		self.last_tick = datetime.now()
 		
 		self.buffer = MessageBuffer(20)
 		self.buffer.set_system_prompt(self.get_system_prompt())
@@ -506,7 +538,10 @@ class AISystem:
 		self.buffer.flush()
 		if self.last_login is None:
 			self.buffer.add_message("user", "[The user has logged in for the first time]")
-		self.last_login = datetime.now()	
+		self.last_login = datetime.now()
+		
+		if not hasattr(self, "last_tick"):
+			self.last_tick = datetime.now()	
 		
 	def send_message(self, user_input):
 		self.tick()
@@ -523,10 +558,10 @@ class AISystem:
 		short_term = "\n".join(mem.format_memory() for mem in short_term_memories)
 		long_term = "\n".join(mem.format_memory() for mem in long_term_memories)
 		#print("Short term:")
-#		print(short_term)
+#		print("\n".join(mem.format_memory(debug=True) for mem in short_term_memories))
 #		print()
 #		print("Long term:")
-#		print(long_term)
+#		print("\n".join(mem.format_memory(debug=True) for mem in long_term_memories))
 #		print()
 		thought_data = self.thought_system.think(
 			self.buffer.to_list(False),
@@ -556,11 +591,14 @@ class AISystem:
 		return response
 
 	def tick(self):
+		now = datetime.now()
+		dt = (now - self.last_tick).total_seconds()
 		self.emotion_system.tick()
-		self.memory_system.tick()
+		self.memory_system.tick(dt)
 		if (datetime.now() - self.last_message).total_seconds() > 2 * 3600:
 			self.memory_system.surface_random_thoughts()
 			print("Random thoughts surfaced")
+		self.last_tick = now
 		
 	def save(self, path):
 		import pickle
