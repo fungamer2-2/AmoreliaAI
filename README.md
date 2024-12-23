@@ -18,7 +18,7 @@ Currently uses [Mistral AI](https://mistral.ai) models. To use this project, you
 
 ## Thought system
 
-Before responding, the AI is prompted to generate a list of thoughts from its perspective. This helps make it a bit more realistic, and think as if it truly had its own personality.
+Before responding, the AI is prompted to generate a list of thoughts from its perspective. These thoughts are treated as the AI's "inner monologue." This helps make it a bit more realistic, and think as if it truly had its own personality.
 
 Additionally, the AI is designed to look for and gather insights to add to its memory, in order to gain a higher-level understanding of the user.
 
