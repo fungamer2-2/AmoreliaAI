@@ -7,7 +7,7 @@ PERSONALITY_INTENSITY_FACTOR = 0.3
 LSH_VEC_DIM = 1024
 LSH_NUM_BITS = 2
 
-MEMORY_DECAY_TIME_MULT = 1.5
+MEMORY_DECAY_TIME_MULT = 2
 
 EMOTION_MAP = {
 	"Admiration": (0.5, 0.3, -0.2),
@@ -105,10 +105,10 @@ THOUGHT_PROMPT = """You are currently in a conversation wth the user.
 - **Shame**: About a self-initiated blameworthy act
 - **Admiration**: About an other-initiated praiseworthy act
 - **Reproach**: About an other-initiated blameworthy act
-- **Gratification**: About a self-initiated praiseworthy act that resulted in something good for you
-- **Gratitude**: About an other-initiated praiseworthy act that resulted in something good for you
-- **Remorse**: About a self-initiated blameworthy act that resulted in something bad for you
-- **Anger**: About an other-initiated praiseworthy act that resulted in something bad for you
+- **Gratification**: About a self-initiated praiseworthy act that resulted in something good for you (Pride + Joy = Gratification)
+- **Gratitude**: About an other-initiated praiseworthy act that resulted in something good for you (Admiration + Joy = Gratitude)
+- **Remorse**: About a self-initiated blameworthy act that resulted in something bad for you (Shame + Distress = Remorse)
+- **Anger**: About an other-initiated praiseworthy act that resulted in something bad for you (Reproach + Distress = Anger)
 </emotion_guidelines>
 
 <ai_memories>
@@ -148,9 +148,9 @@ Respond with a JSON object in this format:
 {{
 	"thoughts": list[str]  // Your chain of thoughts, as a list of strings.
 	"emotion_reason": str,  // Based on the emotion guidelines, briefly describe, in 1-2 sentences, why you feel the way you do, using the first person. Example template: "[insert event here] occured, and [1-2 sentence description of your feelings about it]."
-	"emotion": str  // How the user input made you feel. The emotion must be one of the emotions from the emotion_guidelines
-	"emotion_intensity": int  // The emotion intensity, on a scale from 1 to 10,
-	"insights": list[str]  // If you gained any high-level insights from chatting with the user, put them here. Do not repeat insights that have already been made. If there is nothing important to return, return an empty list (`[]`) corresponding to the `insights` key.
+	"emotion": str  // How the user input made you feel. The emotion must be one of the emotions from the emotion_guidelines. Valid emotions are: Joy, Distress, Hope, Fear, Satisfaction, FearsConfirmed, Disappointment, Relief, HappyFor, Pity, Resentment, Gloating, Pride, Shame, Admiration, Reproach, Gratification, Gratitude, Remorse, Anger
+	"emotion_intensity": int,  // The emotion intensity, on a scale from 1 to 10,
+	"insights": list[str]  // If you gained any high-level insights from chatting with the user, put them here (e.g. 'The user seems...', 'The user likes...', 'The user is...'). Do not repeat insights that have already been made. If there is nothing important to return, return an empty list (`[]`) corresponding to the `insights` key.
 }}
 
 Your thoughts should reflect your current_mood above. Each thought should have around 2 sentences.

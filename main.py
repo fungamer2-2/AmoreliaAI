@@ -60,6 +60,34 @@ Return a JSON obiect in the format:
 Below is the memory you are to rate:
 <memory>{memory}</memory>"""
 
+GENERATE_USER_RESPONSES_PROMPT = """# Task
+
+Given the following conversation, please suggest 3 to 5 possible responses that the USER could respond to the last ASSISTANT message given the conversation context.
+
+# Role descriptions
+
+- **USER**: These are messages from the human
+- **ASSISTANT**: These are responses from the AI model
+
+# Format Instructions
+
+Respond in JSON format:
+```
+{{
+	"possible_responses": list[str]  // The list of responses that the USER might give, based on the conversation context
+}}
+```
+
+# Conversation History
+
+Here is the conversation history so far:
+
+```
+{conversation_history}
+```
+
+Possible USER responses:"""
+
 def rate_importance(memory):
 	model = MistralLLM("open-mistral-nemo")
 	prompt = IMPORTANCE_PROMPT.format(memory=memory)
@@ -70,6 +98,26 @@ def rate_importance(memory):
 	)
 	return data.get("importance", 3)
 	
+def suggest_responses(conversation):
+	history_str = "\n\n".join(
+		f"{msg['role'].upper()}: {msg['content']}"
+		for msg in conversation
+		if msg["role"] != "system"
+	)
+	model = MistralLLM("open-mistral-nemo")
+	prompt = GENERATE_USER_RESPONSES_PROMPT.format(
+		conversation_history=history_str
+	)
+	
+	data = model.generate(
+		prompt,
+		temperature=0.7,
+		presence_penalty=0.5,
+		frequency_penalty=0.1,
+		return_json=True
+	)
+	return data["possible_responses"]
+
 
 def normalize_text(text):			
 	text = text.lower()
@@ -128,6 +176,11 @@ def normalize_text(text):
 	for c in contractions:
 		text = re.sub(rf"(\b)({c})(\b)", _replacement, text)
 	return text
+	
+	
+def generate_possible_responses(conversation):
+	assert conversation[-1]["role"] == "assistant"
+	
 	
 	
 class Memory:
@@ -458,28 +511,31 @@ class ThoughtSystem:
 			short_term=short_term,
 			long_term=long_term
 		)
-		
+		 
 		data = self.model.generate(
 			[
 				{"role":"system", "content":AI_SYSTEM_PROMPT},
 				{"role":"user", "content":prompt}
 			],
-			temperature=0.7,
+			temperature=0.9,
+			frequency_penalty=0.05,
 			return_json=True
 		)
 		intensity = int(data.get("emotion_intensity", 5))
-		emotion = data["emotion"]
+		emotion = data.get("emotion", "")
+		insights = data.get("insights", [])
 		
 		if emotion not in EMOTION_MAP:
 			for em in EMOTION_MAP:
 				if em.lower() == emotion.lower():
 					data["emotion"] = em
 					break
-		
+			
 		data["emotion_intensity"] = intensity
-		
+		data.setdefault("emotion_reason", "I feel this way based on how the conversation has been going.")
+		emotion_vector = EMOTION_MAP.get(emotion, (0.0, 0.0, 0.0))
 		self.emotion_system.experience_emotion(
-			Emotion(*EMOTION_MAP[data["emotion"]]),
+			Emotion(*emotion_vector),
 			intensity/10
 		)
 		
@@ -489,13 +545,10 @@ class ThoughtSystem:
 				print(f"- {thought}")
 			print()
 		
-#			print(f"Emotion: {data['emotion']}, intensity {intensity}/10")
-#			print(f"Emotion reason: {data['emotion_reason']}")
-		
-		if data["insights"]:
+		if insights:
 			# Add new insights gained into memory
 			print("Insights gained:")
-			for insight in data["insights"]:
+			for insight in insights:
 				print(f"- {insight}")
 				self.memory_system.remember(f"I gained an insight while chatting with the user: {insight}")
 		return data
@@ -528,6 +581,9 @@ class AISystem:
 		prompt = AI_SYSTEM_PROMPT + "\n\nYour Personality Description: " + self.personality_system.get_summary()
 		return prompt
 		
+	def get_message_history(self, include_system_prompt=True):
+		return self.buffer.to_list(include_system_prompt)
+		
 	def get_mood(self):
 		return self.emotion_system.mood
 		
@@ -536,8 +592,8 @@ class AISystem:
 		
 	def on_startup(self):
 		self.buffer.flush()
-		if self.last_login is None:
-			self.buffer.add_message("user", "[The user has logged in for the first time]")
+		#if self.last_login is None:
+#			self.buffer.add_message("user", "[The user has logged in for the first time]")
 		self.last_login = datetime.now()
 		
 		if not hasattr(self, "last_tick"):
@@ -550,7 +606,7 @@ class AISystem:
 
 		self.buffer.add_message("user", user_input)
 		
-		history = self.buffer.to_list()
+		history = self.get_message_history()
 		
 		mood = self.get_mood()
 		
@@ -564,7 +620,7 @@ class AISystem:
 #		print("\n".join(mem.format_memory(debug=True) for mem in long_term_memories))
 #		print()
 		thought_data = self.thought_system.think(
-			self.buffer.to_list(False),
+			self.get_message_history(False),
 			short_term_memories,
 			long_term_memories
 		)
@@ -703,7 +759,17 @@ while True:
 			ai.emotion_system.reset_mood()	
 		elif command == "consolidate_memories":
 			ai.memory_system.consolidate_memories()
+		elif command == "suggest":
+			history = ai.get_message_history(False)
 			
+			if history:
+				print("Suggesting possible user responses...")
+				possible_responses = suggest_responses(history)
+				print("Possible responses:")
+				for response in possible_responses:
+					print("- " + response)
+			else:
+				print("You need to have sent at least one message before you can use this command")	
 		#ai.save(PATH)
 		continue
 	
