@@ -82,9 +82,7 @@ Current time: {curr_time}
 </ai_internal_thoughts>
 <ai_emotion name="{emotion}">AI emotion reason: {emotion_reason}</ai_emotion>
 
-Your response should be brief, around 2-4 sentences.
-
-AI Response:"""
+Your response should be brief, around 2-4 sentences."""
 
 THOUGHT_PROMPT = """You are currently in a conversation wth the user.
 
