@@ -1,6 +1,7 @@
 import uuid
 import numpy as np
 import random
+import math
 
 from collections import deque
 from datetime import datetime
@@ -271,6 +272,8 @@ class MemorySystem:
 	def consolidate_memories(self):
 		print("Consolidating all memories...")
 		memories = self.short_term.get_memories()
+		for mem in memories:
+			mem.strength += 1
 		self.long_term.add_memories(memories)
 		self.short_term.clear_memories()
 		
