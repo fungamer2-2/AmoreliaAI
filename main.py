@@ -236,12 +236,12 @@ class AISystem:
 		short_term_memories, long_term_memories = self.memory_system.retrieve_memories(history)
 		short_term = "\n".join(mem.format_memory() for mem in short_term_memories)
 		long_term = "\n".join(mem.format_memory() for mem in long_term_memories)
-		print("Short term:")
-		print("\n".join(mem.format_memory(debug=True) for mem in short_term_memories))
-		print()
-		print("Long term:")
-		print("\n".join(mem.format_memory(debug=True) for mem in long_term_memories))
-		print()
+		#print("Short term:")
+#		print("\n".join(mem.format_memory(debug=True) for mem in short_term_memories))
+#		print()
+#		print("Long term:")
+#		print("\n".join(mem.format_memory(debug=True) for mem in long_term_memories))
+#		print()
 		thought_data = self.thought_system.think(
 			self.get_message_history(False),
 			short_term_memories,
