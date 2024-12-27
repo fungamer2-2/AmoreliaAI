@@ -1,5 +1,7 @@
 import time
 import re
+import os
+import traceback
 
 from collections import deque
 from datetime import datetime
@@ -10,6 +12,7 @@ from emotion_system import (
 	EmotionSystem,
 	PersonalitySystem
 )
+from utils import clear_screen
 from memory_system import MemorySystem
 from const import *
 
@@ -42,23 +45,6 @@ class MessageBuffer:
 		return history
 
 
-IMPORTANCE_PROMPT = """Given the following memory, rate the importance of the memory on a scale from 1 to 10.
-
-For example, memories corresponding to a score of 1 may include:
-- Chit-chat greetings
-- Chat about the weather with no information of significance
-
-Memories corresponding to a score of 10 may include:
-- Getting married
-- A loved one passing away
-- Etc.
-
-Return a JSON obiect in the format:
-`{{"importance": integer}}`
-
-Below is the memory you are to rate:
-<memory>{memory}</memory>"""
-
 GENERATE_USER_RESPONSES_PROMPT = """# Task
 
 Given the following conversation, please suggest 3 to 5 possible responses that the USER could respond to the last ASSISTANT message given the conversation context.
@@ -73,7 +59,7 @@ Given the following conversation, please suggest 3 to 5 possible responses that 
 Respond in JSON format:
 ```
 {{
-	"possible_responses": list[str]  // The list of responses that the USER might give, based on the conversation context
+	"possible_user_responses": list[str]  // The list of responses that the USER might give, based on the conversation context
 }}
 ```
 
@@ -85,17 +71,7 @@ Here is the conversation history so far:
 {conversation_history}
 ```
 
-Possible USER responses:"""
-
-def rate_importance(memory):
-	model = MistralLLM("open-mistral-nemo")
-	prompt = IMPORTANCE_PROMPT.format(memory=memory)
-	data = model.generate(
-		prompt,
-		temperature=0.0,
-		return_json=True
-	)
-	return data.get("importance", 3)
+Possible **USER** responses:"""
 	
 def suggest_responses(conversation):
 	history_str = "\n\n".join(
@@ -103,7 +79,7 @@ def suggest_responses(conversation):
 		for msg in conversation
 		if msg["role"] != "system"
 	)
-	model = MistralLLM("open-mistral-nemo")
+	model = MistralLLM("mistral-small-latest")
 	prompt = GENERATE_USER_RESPONSES_PROMPT.format(
 		conversation_history=history_str
 	)
@@ -115,9 +91,7 @@ def suggest_responses(conversation):
 		frequency_penalty=0.1,
 		return_json=True
 	)
-	return data["possible_responses"]
-
-
+	return data["possible_user_responses"]
 
 
 class ThoughtSystem:
@@ -151,9 +125,7 @@ class ThoughtSystem:
 		
 		short_term = "\n".join(mem.format_memory() for mem in short_term_memories)
 		long_term = "\n".join(mem.format_memory() for mem in long_term_memories)
-		
-		
-		
+			
 		prompt = THOUGHT_PROMPT.format(
 			history_str=history_str,
 			user_input=messages[-1]["content"],
@@ -245,8 +217,6 @@ class AISystem:
 		
 	def on_startup(self):
 		self.buffer.flush()
-		#if self.last_login is None:
-#			self.buffer.add_message("user", "[The user has logged in for the first time]")
 		self.last_login = datetime.now()
 		
 		if not hasattr(self, "last_tick"):
@@ -266,12 +236,12 @@ class AISystem:
 		short_term_memories, long_term_memories = self.memory_system.retrieve_memories(history)
 		short_term = "\n".join(mem.format_memory() for mem in short_term_memories)
 		long_term = "\n".join(mem.format_memory() for mem in long_term_memories)
-		#print("Short term:")
-#		print("\n".join(mem.format_memory(debug=True) for mem in short_term_memories))
-#		print()
-#		print("Long term:")
-#		print("\n".join(mem.format_memory(debug=True) for mem in long_term_memories))
-#		print()
+		print("Short term:")
+		print("\n".join(mem.format_memory(debug=True) for mem in short_term_memories))
+		print()
+		print("Long term:")
+		print("\n".join(mem.format_memory(debug=True) for mem in long_term_memories))
+		print()
 		thought_data = self.thought_system.think(
 			self.get_message_history(False),
 			short_term_memories,
@@ -423,11 +393,25 @@ while True:
 					print("- " + response)
 			else:
 				print("You need to have sent at least one message before you can use this command")	
-		#ai.save(PATH)
+		elif command == "wipe" or command == "reset":
+			choice = input("Really erase saved data and memories for this AI? Type 'yes' to erase data, or anything else to cancel: ")
+			if choice.strip().lower() == "yes":
+				os.remove(PATH)
+				input("The AI has been reset. Press enter to continue.")
+				clear_screen()
+				ai = AISystem()
+				ai.on_startup()
+
 		continue
 	
 	print()
-	message = ai.send_message(msg)
-	ai.save(PATH)
-	print("AI: " + message)
+	try:
+		message = ai.send_message(msg)
+	except Exception as e:
+		import traceback
+		traceback.print_exception(type(e), e, e.__traceback__)
+		print("Oops! There was an error processing your input. Please try again in a moment.")
+	else:
+		ai.save(PATH)
+		print("AI: " + message)
 	
