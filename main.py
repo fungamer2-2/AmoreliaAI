@@ -138,7 +138,8 @@ class AISystem:
 		self.last_login = datetime.now()
 		
 		if not hasattr(self, "last_tick"):
-			self.last_tick = datetime.now()	
+			self.last_tick = datetime.now()
+		self.tick()
 		
 	def send_message(self, user_input):
 		self.tick()
@@ -154,12 +155,12 @@ class AISystem:
 		short_term_memories, long_term_memories = self.memory_system.retrieve_memories(history)
 		short_term = "\n".join(mem.format_memory() for mem in short_term_memories)
 		long_term = "\n".join(mem.format_memory() for mem in long_term_memories)
-		print("Short term:")
-		print("\n".join(mem.format_memory(debug=True) for mem in short_term_memories))
-		print()
-		print("Long term:")
-		print("\n".join(mem.format_memory(debug=True) for mem in long_term_memories))
-		print()
+		#print("Short term:")
+#		print("\n".join(mem.format_memory(debug=True) for mem in short_term_memories))
+#		print()
+#		print("Long term:")
+#		print("\n".join(mem.format_memory(debug=True) for mem in long_term_memories))
+#		print()
 		thought_data = self.thought_system.think(
 			self.get_message_history(False),
 			short_term_memories,
@@ -193,7 +194,7 @@ class AISystem:
 		dt = (now - self.last_tick).total_seconds()
 		self.emotion_system.tick()
 		self.memory_system.tick(dt)
-		if (datetime.now() - self.last_message).total_seconds() > 2 * 3600:
+		if dt > 2 * 3600:
 			self.memory_system.surface_random_thoughts()
 			print("Random thoughts surfaced")
 		self.last_tick = now

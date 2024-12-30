@@ -234,12 +234,14 @@ class LongTermMemory:
 		for mem in self.get_memories():
 			retain_prob = mem.get_retention_prob()
 			if retain_prob >= 1.0:
-				continue	
-			prob = 1 - ((1 - retain_prob) ** (dt / 86400))	
-			if random.random() > prob:
+				continue
+			
+			forget_prob = 1 - retain_prob	
+			prob = 1 - ((1 - forget_prob) ** (dt / 86400))	
+			if random.random() < prob:
 				print("Forgot memory because it has not been recalled in a while.")
-				print(f"Forgotten memory content: {memory.content}")
-				self.forget_memory(memory)
+				print(f"Forgotten memory content: {mem.content}")
+				self.forget_memory(mem)
 	
 
 class MemorySystem:
