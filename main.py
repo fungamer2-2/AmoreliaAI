@@ -7,13 +7,14 @@ from collections import deque
 from datetime import datetime
 
 from llm import MistralLLM
+from utils import clear_screen
 from emotion_system import (
 	Emotion,
 	EmotionSystem,
 	PersonalitySystem
 )
-from utils import clear_screen
 from memory_system import MemorySystem
+from thought_system import ThoughtSystem
 from const import *
 
 
@@ -47,19 +48,19 @@ class MessageBuffer:
 
 GENERATE_USER_RESPONSES_PROMPT = """# Task
 
-Given the following conversation, please suggest 3 to 5 possible responses that the USER could respond to the last ASSISTANT message given the conversation context.
+Given the following conversation, please suggest 3 to 5 possible responses that the HUMAN could respond to the last AI message given the conversation context.
 
 # Role descriptions
 
-- **USER**: These are messages from the human
-- **ASSISTANT**: These are responses from the AI model
+- **HUMAN**: These are messages from the human
+- **AI**: These are responses from the AI model
 
 # Format Instructions
 
 Respond in JSON format:
 ```
 {{
-	"possible_user_responses": list[str]  // The list of responses that the USER might give, based on the conversation context
+	"possible_responses": list[str]  // The list of responses that the USER might give, based on the conversation context
 }}
 ```
 
@@ -71,11 +72,15 @@ Here is the conversation history so far:
 {conversation_history}
 ```
 
-Possible **USER** responses:"""
+Possible **HUMAN** responses:"""
 	
 def suggest_responses(conversation):
+	role_map = {
+		"user": "HUMAN",
+		"assistant": "AI"
+	}
 	history_str = "\n\n".join(
-		f"{msg['role'].upper()}: {msg['content']}"
+		f"{role_map[msg['role']]}: {msg['content']}"
 		for msg in conversation
 		if msg["role"] != "system"
 	)
@@ -87,96 +92,9 @@ def suggest_responses(conversation):
 	data = model.generate(
 		prompt,
 		temperature=0.7,
-		presence_penalty=0.5,
-		frequency_penalty=0.1,
 		return_json=True
 	)
-	return data["possible_user_responses"]
-
-
-class ThoughtSystem:
-	
-	def __init__(
-		self,
-		emotion_system,
-		memory_system
-	):
-		self.model = MistralLLM("mistral-large-latest")
-		self.emotion_system = emotion_system
-		self.memory_system = memory_system
-		self.show_thoughts = True
-		
-	def think(
-		self,
-		messages,
-		short_term_memories,
-		long_term_memories
-	):
-		role_map = {
-			"user": "User",
-			"assistant": "AI"
-		}
-		history_str = "\n\n".join(
-			f"{role_map[msg['role']]}: {msg['content']}"
-			for msg in messages[:-1]
-		)
-		mood_prompt = self.emotion_system.get_mood_prompt()
-		mood = self.emotion_system.mood
-		
-		short_term = "\n".join(mem.format_memory() for mem in short_term_memories)
-		long_term = "\n".join(mem.format_memory() for mem in long_term_memories)
-			
-		prompt = THOUGHT_PROMPT.format(
-			history_str=history_str,
-			user_input=messages[-1]["content"],
-			mood_long_desc=self.emotion_system.get_mood_long_description(),
-			curr_date=datetime.now().strftime("%a, %-m/%-d/%Y"),
-			curr_time=datetime.now().strftime("%-I:%M %p"),
-			mood_prompt=mood_prompt,
-			short_term=short_term,
-			long_term=long_term
-		)
-		 
-		data = self.model.generate(
-			[
-				{"role":"system", "content":AI_SYSTEM_PROMPT},
-				{"role":"user", "content":prompt}
-			],
-			temperature=0.7,
-			presence_penalty=0.7,
-			return_json=True
-		)
-		intensity = int(data.get("emotion_intensity", 5))
-		emotion = data.get("emotion", "")
-		insights = data.get("insights", [])
-		
-		if emotion not in EMOTION_MAP:
-			for em in EMOTION_MAP:
-				if em.lower() == emotion.lower():
-					data["emotion"] = em
-					break
-			
-		data["emotion_intensity"] = intensity
-		data.setdefault("emotion_reason", "I feel this way based on how the conversation has been going.")
-		emotion_vector = EMOTION_MAP.get(emotion, (0.0, 0.0, 0.0))
-		self.emotion_system.experience_emotion(
-			Emotion(*emotion_vector),
-			intensity/10
-		)
-		
-		if self.show_thoughts:
-			print("AI thoughts:")
-			for thought in data["thoughts"]:
-				print(f"- {thought}")
-			print()
-		
-		if insights:
-			# Add new insights gained into memory
-			print("Insights gained:")
-			for insight in insights:
-				print(f"- {insight}")
-				self.memory_system.remember(f"I gained an insight while chatting with the user: {insight}")
-		return data
+	return data["possible_responses"]
 
 
 class AISystem:
@@ -236,12 +154,12 @@ class AISystem:
 		short_term_memories, long_term_memories = self.memory_system.retrieve_memories(history)
 		short_term = "\n".join(mem.format_memory() for mem in short_term_memories)
 		long_term = "\n".join(mem.format_memory() for mem in long_term_memories)
-		#print("Short term:")
-#		print("\n".join(mem.format_memory(debug=True) for mem in short_term_memories))
-#		print()
-#		print("Long term:")
-#		print("\n".join(mem.format_memory(debug=True) for mem in long_term_memories))
-#		print()
+		print("Short term:")
+		print("\n".join(mem.format_memory(debug=True) for mem in short_term_memories))
+		print()
+		print("Long term:")
+		print("\n".join(mem.format_memory(debug=True) for mem in long_term_memories))
+		print()
 		thought_data = self.thought_system.think(
 			self.get_message_history(False),
 			short_term_memories,
@@ -253,6 +171,7 @@ class AISystem:
 			ai_thoughts="\n".join("- " + thought for thought in thought_data["thoughts"]),
 			emotion=thought_data["emotion"],
 			emotion_reason=thought_data["emotion_reason"],
+			emotion_influence=thought_data["emotion_influence"],
 			curr_date=datetime.now().strftime("%a, %-m/%-d/%Y"),
 			curr_time=datetime.now().strftime("%-I:%M %p"),
 			short_term=short_term,
@@ -343,9 +262,8 @@ def command_parse(string):
 	return command, _parse_args(args)
 
 
-PATH = "ai_system_save.pkl"
 
-ai = AISystem.load(PATH)
+ai = AISystem.load(SAVE_PATH)
 if ai:
 	print("AI loaded.")
 else:
@@ -394,14 +312,15 @@ while True:
 			else:
 				print("You need to have sent at least one message before you can use this command")	
 		elif command == "wipe" or command == "reset":
-			choice = input("Really erase saved data and memories for this AI? Type 'yes' to erase data, or anything else to cancel: ")
-			if choice.strip().lower() == "yes":
-				os.remove(PATH)
-				input("The AI has been reset. Press enter to continue.")
-				clear_screen()
-				ai = AISystem()
-				ai.on_startup()
-
+			if os.path.exists(SAVE_PATH):
+				choice = input("Really erase saved data and memories for this AI? Type 'yes' to erase data, or anything else to cancel: ")
+				if choice.strip().lower() == "yes":
+					os.remove(SAVE_PATH)
+					input("The AI has been reset. Press enter to continue.")
+					clear_screen()
+					ai = AISystem()
+					ai.on_startup()
+	
 		continue
 	
 	print()
@@ -412,6 +331,6 @@ while True:
 		traceback.print_exception(type(e), e, e.__traceback__)
 		print("Oops! There was an error processing your input. Please try again in a moment.")
 	else:
-		ai.save(PATH)
+		ai.save(SAVE_PATH)
 		print("AI: " + message)
 	

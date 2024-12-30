@@ -219,32 +219,32 @@ class EmotionSystem:
 	def reset_mood(self):
 		self.mood = self.get_base_mood() / 2
 		
+	def _get_mood_word(self, val, pos_str, neg_str):
+		if abs(val) < 0.04:
+			return "neutral"
+		if abs(val) > 0.67:
+			adv = "very"
+		elif abs(val) > 0.33:
+			adv = "moderately"
+		else:
+			adv = "slightly"
 		
-	def get_mood_long_description(self):
-		def _get_mood_word(val, pos_str, neg_str):
-			if abs(val) < 0.02:
-				return "neutral"
-			if abs(val) > 0.7:
-				adv = "very"
-			elif abs(val) < 0.3:
-				adv = "slightly"
-			else:
-				adv = "moderately"
+		return adv + " " + (pos_str if val >= 0 else neg_str)
 			
-			return adv + " " + (pos_str if val >= 0 else neg_str)
-		
+	def get_mood_long_description(self):
 		mood = self.mood	
 		return "\n".join([
-			f"Pleasure: {num_to_str_sign(mood.pleasure, 2)} ({_get_mood_word(mood.pleasure, 'pleasant', 'unpleasant')})",
-			f"Arousal: {num_to_str_sign(mood.arousal, 2)} ({_get_mood_word(mood.arousal, 'energized', 'soporific')})",
-			f"Dominance: {num_to_str_sign(mood.dominance, 2)} ({_get_mood_word(mood.dominance, 'dominant', 'submissive')})"
+			f"Pleasure: {num_to_str_sign(mood.pleasure, 2)} ({self._get_mood_word(mood.pleasure, 'pleasant', 'unpleasant')})",
+			f"Arousal: {num_to_str_sign(mood.arousal, 2)} ({self._get_mood_word(mood.arousal, 'energized', 'soporific')})",
+			f"Dominance: {num_to_str_sign(mood.dominance, 2)} ({self._get_mood_word(mood.dominance, 'dominant', 'submissive')})"
 		])
 		
 	def print_mood(self):
 		mood = self.mood
-		print(self.get_mood_long_description())
-		
-
+		print(f"Pleasure: {self._get_mood_word(mood.pleasure, 'pleasant', 'unpleasant')}")
+		print(f"Arousal: {self._get_mood_word(mood.arousal, 'energized', 'soporific')}")
+		print(f"Dominance: {self._get_mood_word(mood.dominance, 'dominant', 'submissive')}")
+	
 	def get_mood_name(self):
 		mood = self.mood
 		if mood.get_intensity() < 0.05:
@@ -294,11 +294,15 @@ class EmotionSystem:
 	def experience_emotion(self, emotion, intensity):		
 		mood_align = emotion.dot(self.mood)
 		personality_align = emotion.dot(self.get_base_mood())
-		intensity_mult = 1 + MODD_INTENSITY_FACTOR * mood_align + PERSONALITY_INTENSITY_FACTOR * personality_align 
-		if intensity_mult < 0.1:
-			intensity_mult = 0.1
+		
+		orig = intensity
+		intensity_mod = MODD_INTENSITY_FACTOR * mood_align + PERSONALITY_INTENSITY_FACTOR * personality_align 
+		intensity += intensity_mod
+		intensity = max(0.05, min(intensity, 1.0))
+		#print(f"Intensity before: {orig}")
+#		print(f"Intensity after:  {intensity}")
 		#print(f"Intensity multiplier: x{intensity_mult}")
-		self.emotions.append(emotion * intensity * intensity_mult)
+		self.emotions.append(emotion * intensity)
 
 	def _tick_emotion_change(self, t):
 		new_emotions = []		
@@ -360,7 +364,7 @@ class EmotionSystem:
 		return base_mood
 		
 	def _tick_mood_decay(self, t):		
-		half_life = MOOD_HALF_LIFE * self.get_mood_time_mult()
+		half_life = MOOD_HALF_LIFE #* self.get_mood_time_mult()
 		
 		r = 0.5 ** (t / half_life)		
 		

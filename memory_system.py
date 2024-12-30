@@ -153,7 +153,12 @@ class ShortTermMemory:
 		self.memories = deque()
 		
 	def add_memory(self, memory):
-		self.memories.append(memory) 
+		for mem in self.memories:
+			if mem.content.lower() == memory.content.lower():
+				self.move_to_end(mem)
+				break
+		else:
+			self.memories.append(memory) 
 		
 	def move_to_end(self, memory):
 		if memory in self.memories:
