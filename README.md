@@ -15,6 +15,7 @@ Currently uses [Mistral AI](https://mistral.ai) models. To use this project, you
 5. Make sure to install the requirements: `pip install -r requirements.txt` 
 6. Run `main.py`
 
+If you find a bug or have a feature request, feel free to [open an issue](https://github.com/fungamer2-2/HumanlikeAI/issues/new/choose).
 
 ## Thought system
 
