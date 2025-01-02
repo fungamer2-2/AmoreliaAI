@@ -78,6 +78,7 @@ Use these memories for your response if necessary.
 User: {user_input}
 
 # Date and Time
+
 Current date: {curr_date}
 Current time: {curr_time}
 
@@ -90,10 +91,12 @@ Current time: {curr_time}
 Here is the AI's current emotion:
 
 AI: I am currently feeling "{emotion}", and here's why: {emotion_reason}
+{emotion_influence}
 
 ---
 
-Your response should be brief, around 2-4 sentences."""
+Usually, your responses should be concise (usually 2-4 sentences)
+AI response:"""
 
 THOUGHT_PROMPT = """# Context
 
@@ -158,21 +161,32 @@ Current time: {curr_time}
 
 # Instructions
 
-Generate a list of at least 5 thoughts, and the emotion. The thoughts should be in first-person, from your perspective as the AI.
+Generate a list of 5 thoughts, and the emotion. The thoughts should be in first-person, from your perspective as the AI.
+
 Respond with a JSON object in this format:
 {{
-	"thoughts": list[str]  // Your chain of thoughts, as a list of strings.
+	"thoughts": list[str]  // Your chain of thoughts, as a list of strings. Can be as short as 3 thoughts or as long as 10 thoughts.
 	"emotion_reason": str,  // Based on the emotion guidelines, briefly describe, in 1-2 sentences, why you feel the way you do, using the first person. Example template: "[insert event here] occured, and [1-2 sentence description of your feelings about it]."
 	"emotion": str  // How the user input made you feel. The emotion must be one of the emotions from the emotion_guidelines. Valid emotions are: Joy, Distress, Hope, Fear, Satisfaction, FearsConfirmed, Disappointment, Relief, HappyFor, Pity, Resentment, Gloating, Pride, Shame, Admiration, Reproach, Gratification, Gratitude, Remorse, Anger
 	"emotion_intensity": int,  // The emotion intensity, on a scale from 1 to 10,
 	"emotion_influence": str,  // How will this emotion influence your response? Describe it in a sentence or two.
 	"high_level_insights": list[str]  // If there are any high-level insights that you can infer from the above information that are likely to be worth remembering long-term, if any (e.g. 'The user seems...', 'The user likes...', 'The user is...'). Insights will be added to memory. Do not repeat insights that have already been made. If there is nothing important to return, return an empty list (`[]`) corresponding to the `insights` key.
+	"further_thought_needed": int,  // Is additional thought needed? If so, how many additional orders of thought are needed? For complex queries, you can set this at 3-5, but if it's very simple, set this at 0.
 }}
 
-Your thoughts should reflect your current_mood above. Each thought should have around 2 sentences.
+Your thoughts should reflect your current_mood above.
 Remember, the user will not see these thoughts, so do not use the words 'you' or 'your' in internal thoughts.
 When choosing the emotion, remember to follow the emotion_guidelines above, as they are based on the OCC model of appraisal.
-Pay special attention to your current_mood and ai_memories."""
+Pay special attention to your current_mood and ai_memories.
+
+Generate the first-order thoughts:"""
+
+HIGHER_ORDER_THOUGHTS = """Given your previous thoughts and the previous context, generate a set of higher-order thoughts using the following format:
+{
+	"thoughts": list[str]  // Your higher order thoughts here, possibly reflecting on any previous thoughts and/or context
+}
+
+Generate the higher-order thoughts:"""
 
 SUMMARIZE_PERSONALITY = """Summarize the personality of a character with the following trait values.
 Each trait value ranges from -1.0 to +1.0, where +0.0 is neutral/in the middle.

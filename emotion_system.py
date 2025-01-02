@@ -2,8 +2,9 @@ import math
 import time
 from datetime import datetime
 from const import *
-from utils import num_to_str_sign
+from utils import num_to_str_sign, val_to_symbol_color
 from llm import MistralLLM
+from colored import Fore, Style
 
 
 def get_default_mood(open, conscientious, extrovert, agreeable, neurotic):
@@ -44,6 +45,7 @@ class PersonalitySystem:
 		
 	def get_summary(self):
 		if not self.summary:
+			print("Summarizing personality values...")
 			self.summary = summarize_personality(
 				self.open,
 				self.conscientious,
@@ -104,8 +106,7 @@ class Emotion:
 			self.arousal -= other.arousal
 			self.dominance -= other.dominance
 			return self
-		return NotImplemented
-		
+		return NotImplemented	
 		
 	def __mul__(self, other):
 		if isinstance(other, (int, float)):
@@ -186,6 +187,40 @@ class Emotion:
 		return f"{self.__class__.__name__}({round(self.pleasure, 2):.2f}, {round(self.arousal, 2):.2f}, {round(self.dominance, 2):.2f})"
 
 
+class RelationshipSystem:
+	
+	def __init__(self):
+		self.friendliness = 0.0
+		self.dominance = 0.0
+		
+	def tick(self, dt):
+		num_days = dt / 86400
+		self.friendliness *= math.exp(-num_days/60)
+		self.dominance *= math.exp(-num_days/60)
+	
+	def on_emotion(self, emotion, intensity):
+		if emotion not in ["Joy", "Distress", "Admiration", "Reproach", "Gratitude", "Anger"]:
+			return
+			
+		relation_change_mult = 2.5
+		
+		pleasure, _, dominance = EMOTION_MAP[emotion]
+		pleasure *= intensity
+		dominance *= intensity
+		self.friendliness += pleasure * relation_change_mult
+		self.dominance += dominance * relation_change_mult
+		#print(f"Friendliness: {self.friendliness:.2f}")
+#		print(f"Dominance: {self.dominance:.2f}")
+#		
+	def print_relation(self):
+		print("Relationship:")
+		print("-------------")
+		string = val_to_symbol_color(self.friendliness, 20, Fore.green, Fore.red, val_scale=100)
+		print(f"Friendliness: {string}")
+		string = val_to_symbol_color(self.dominance, 20, Fore.cyan, Fore.light_magenta, val_scale=100)		
+		print(f"Dominance:    {string}")
+		
+		
 class EmotionSystem:
 	
 	def __init__(self, personality_system):
@@ -195,7 +230,8 @@ class EmotionSystem:
 			personality_system.extrovert,
 			personality_system.agreeable,
 			personality_system.neurotic
-		)		
+		)
+		self.relation = RelationshipSystem()		
 		self.base_mood = base_mood
 		self.reset_mood()
 		self.last_update = time.time()
@@ -231,7 +267,7 @@ class EmotionSystem:
 		
 		return adv + " " + (pos_str if val >= 0 else neg_str)
 			
-	def get_mood_long_description(self):
+	def get_mood_long_description(self):	
 		mood = self.mood	
 		return "\n".join([
 			f"Pleasure: {num_to_str_sign(mood.pleasure, 2)} ({self._get_mood_word(mood.pleasure, 'pleasant', 'unpleasant')})",
@@ -241,10 +277,18 @@ class EmotionSystem:
 		
 	def print_mood(self):
 		mood = self.mood
-		print(f"Pleasure: {self._get_mood_word(mood.pleasure, 'pleasant', 'unpleasant')}")
-		print(f"Arousal: {self._get_mood_word(mood.arousal, 'energized', 'soporific')}")
-		print(f"Dominance: {self._get_mood_word(mood.dominance, 'dominant', 'submissive')}")
-	
+		print("Mood:")
+		print("--------")
+		string = val_to_symbol_color(mood.pleasure, 10, Fore.green, Fore.red)
+		print(f"Pleasure:  {string}")
+		string = val_to_symbol_color(mood.arousal, 10, Fore.yellow, Fore.cornflower_blue)
+		print(f"Arousal:   {string}")
+		string = val_to_symbol_color(mood.dominance, 10, Fore.cyan, Fore.light_magenta)
+		print(f"Dominance: {string}")
+		print()
+		self.relation.print_relation()
+		print()
+		
 	def get_mood_name(self):
 		mood = self.mood
 		if mood.get_intensity() < 0.05:
@@ -291,7 +335,8 @@ class EmotionSystem:
 		prompt = EMOTION_PROMPTS[self.get_mood_name()]
 		return f"{mood_desc} - {prompt}"
 
-	def experience_emotion(self, emotion, intensity):		
+	def experience_emotion(self, name, intensity):
+		emotion = Emotion(*EMOTION_MAP[name])		
 		mood_align = emotion.dot(self.mood)
 		personality_align = emotion.dot(self.get_base_mood())
 		
@@ -299,6 +344,7 @@ class EmotionSystem:
 		intensity_mod = MODD_INTENSITY_FACTOR * mood_align + PERSONALITY_INTENSITY_FACTOR * personality_align 
 		intensity += intensity_mod
 		intensity = max(0.05, min(intensity, 1.0))
+		self.relation.on_emotion(name, intensity)
 		#print(f"Intensity before: {orig}")
 #		print(f"Intensity after:  {intensity}")
 		#print(f"Intensity multiplier: x{intensity_mult}")
@@ -358,6 +404,9 @@ class EmotionSystem:
 			energy_cycle_mod = (-1.0 - base_mood.arousal) * abs(energy_cycle)
 		
 		energy_cycle_mod *= 0.5
+		
+		base_mood.pleasure += self.relation.friendliness / 100
+		base_mood.dominance += self.relation.dominance / 100
 		
 		base_mood.arousal += energy_cycle_mod  # Higher during the daytime, lower at night
 		base_mood.clamp()

@@ -184,8 +184,6 @@ class AISystem:
 		)
 		self.memory_system.remember(f"User: {user_input}\n\nAI: {response}")
 		self.tick()
-		self.emotion_system.print_mood()
-		print()
 		self.buffer.add_message("assistant", response)		
 		return response
 
@@ -263,7 +261,6 @@ def command_parse(string):
 	return command, _parse_args(args)
 
 
-
 ai = AISystem.load(SAVE_PATH)
 if ai:
 	print("AI loaded.")
@@ -271,6 +268,8 @@ else:
 	ai = AISystem()
 
 ai.on_startup()
+ai.save(SAVE_PATH)
+
 
 while True:
 	ai.tick()
