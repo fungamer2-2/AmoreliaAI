@@ -193,6 +193,16 @@ class RelationshipSystem:
 		self.friendliness = 0.0
 		self.dominance = 0.0
 		
+	def set_relation(
+		self,
+		friendliness=None,
+		dominance=None
+	):
+		if friendliness is not None:
+			self.friendliness = max(-100, min(friendliness, 100))
+		if dominance is not None:
+			self.dominance = max(-100, min(dominance, 100))
+		
 	def tick(self, dt):
 		num_days = dt / 86400
 		self.friendliness *= math.exp(-num_days/60)
@@ -209,9 +219,7 @@ class RelationshipSystem:
 		dominance *= intensity
 		self.friendliness += pleasure * relation_change_mult
 		self.dominance += dominance * relation_change_mult
-		#print(f"Friendliness: {self.friendliness:.2f}")
-#		print(f"Dominance: {self.dominance:.2f}")
-#		
+		
 	def print_relation(self):
 		print("Relationship:")
 		print("-------------")
@@ -220,10 +228,20 @@ class RelationshipSystem:
 		string = val_to_symbol_color(self.dominance, 20, Fore.cyan, Fore.light_magenta, val_scale=100)		
 		print(f"Dominance:    {string}")
 		
+	def get_string(self):
+		return "\n".join((
+			"Friendliness: " + val_to_symbol_color(self.friendliness, 20, val_scale=100),
+			"Dominance: " + val_to_symbol_color(self.dominance, 20, val_scale=100)
+		))
+		
 		
 class EmotionSystem:
 	
-	def __init__(self, personality_system):
+	def __init__(
+		self,
+		personality_system,
+		relation_system
+	):
 		base_mood = Emotion.from_personality(
 			personality_system.open,
 			personality_system.conscientious,
@@ -231,7 +249,7 @@ class EmotionSystem:
 			personality_system.agreeable,
 			personality_system.neurotic
 		)
-		self.relation = RelationshipSystem()		
+		self.relation = relation_system		
 		self.base_mood = base_mood
 		self.reset_mood()
 		self.last_update = time.time()

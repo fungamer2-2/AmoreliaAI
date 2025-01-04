@@ -6,12 +6,15 @@ import traceback
 from collections import deque
 from datetime import datetime
 
+from colored import Fore, Style
+
 from llm import MistralLLM
 from utils import clear_screen
 from emotion_system import (
 	Emotion,
 	EmotionSystem,
-	PersonalitySystem
+	PersonalitySystem,
+	RelationshipSystem
 )
 from memory_system import MemorySystem
 from thought_system import ThoughtSystem
@@ -101,6 +104,7 @@ class AISystem:
 
 	def __init__(self):
 		self.model = MistralLLM("mistral-large-latest")
+	
 		self.personality_system = PersonalitySystem(
 			open=0.45,
 			conscientious=0.25,
@@ -108,10 +112,17 @@ class AISystem:
 			agreeable=0.93,
 			neurotic=-0.15
 		)
-		
 		self.memory_system = MemorySystem()
-		self.emotion_system = EmotionSystem(self.personality_system)
-		self.thought_system = ThoughtSystem(self.emotion_system, self.memory_system)
+		self.relation_system = RelationshipSystem()
+		self.emotion_system = EmotionSystem(
+			self.personality_system,
+			self.relation_system
+		)
+		self.thought_system = ThoughtSystem(
+			self.emotion_system,
+			self.memory_system,
+			self.relation_system
+		)
 		
 		self.last_message = datetime.now()
 		self.last_login = None
@@ -261,6 +272,7 @@ def command_parse(string):
 	return command, _parse_args(args)
 
 
+
 ai = AISystem.load(SAVE_PATH)
 if ai:
 	print("AI loaded.")
@@ -270,6 +282,8 @@ else:
 ai.on_startup()
 ai.save(SAVE_PATH)
 
+
+print(f"{Fore.yellow}Note: It's recommended not to enter any sensitive information.{Style.reset}")
 
 while True:
 	ai.tick()
@@ -283,19 +297,29 @@ while True:
 		command, args = command_parse(msg[1:])
 		if command == "set_pleasure" and len(args) == 1:
 			value = args[0]
-			if not isinstance(value, float):
+			if not isinstance(value, (int, float)):
 				continue
 			ai.emotion_system.set_emotion(pleasure=value)
 		if command == "set_arousal" and len(args) == 1:
 			value = args[0]
-			if not isinstance(value, float):
+			if not isinstance(value, (int, float)):
 				continue
 			ai.emotion_system.set_emotion(arousal=value)
 		elif command == "set_dominance" and len(args) == 1:
 			value = args[0]
-			if not isinstance(value, float):
+			if not isinstance(value, (int, float)):
 				continue
 			ai.emotion_system.set_emotion(dominance=value)
+		elif command == "set_relation_friendliness" and len(args) == 1:
+			value = args[0]
+			if not isinstance(value, (int, float)):
+				continue
+			ai.relation_system.set_relation(friendliness=value)
+		elif command == "set_relation_dominance" and len(args) == 1:
+			value = args[0]
+			if not isinstance(value, (int, float)):
+				continue
+			ai.relation_system.set_relation(dominance=value)	
 		elif command == "reset_mood":
 			ai.emotion_system.reset_mood()	
 		elif command == "consolidate_memories":

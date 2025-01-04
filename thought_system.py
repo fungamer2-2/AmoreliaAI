@@ -10,12 +10,36 @@ class ThoughtSystem:
 	def __init__(
 		self,
 		emotion_system,
-		memory_system
+		memory_system,
+		relation_system
 	):
 		self.model = MistralLLM("mistral-large-latest")
 		self.emotion_system = emotion_system
 		self.memory_system = memory_system
+		self.relation_system = relation_system
 		self.show_thoughts = True
+		
+	def _check_and_fix_thought_output(self, data):
+		data = data.copy()
+		data.setdefault("emotion_intensity", 5)
+		data["emotion_intensity"] = int(data["emotion_intensity"])
+		
+		data.setdefault("emotion", "Neutral")
+		data.setdefault("high_level_insights", [])
+		data.setdefault("emotion_reason", "I feel this way based on how the conversation has been going.")
+		
+		if data["emotion"] not in EMOTION_MAP:
+			for em in EMOTION_MAP:
+				if em.lower() == data["emotion"].lower():
+					data["emotion"] = em
+					break
+			else:
+				data["emotion"] = "Neutral"
+		
+		data.setdefault("further_thought_needed", False)
+		
+		return data		
+		
 		
 	def think(
 		self,
@@ -45,7 +69,8 @@ class ThoughtSystem:
 			curr_time=datetime.now().strftime("%-I:%M %p"),
 			mood_prompt=mood_prompt,
 			short_term=short_term,
-			long_term=long_term
+			long_term=long_term,
+			relationship_str = self.relation_system.get_string()
 		)
 		 
 		thought_history = [
@@ -58,30 +83,13 @@ class ThoughtSystem:
 			presence_penalty=0.5,
 			return_json=True
 		)
+		
+		data = self._check_and_fix_thought_output(data)
+		
 		thought_history.append({
 			"role": "assistant",
 			"content": json.dumps(data, indent=4)
 		})
-		intensity = int(data.get("emotion_intensity", 5))
-		emotion = data.get("emotion", "")
-		insights = data.get("high_level_insights", [])
-		
-		if emotion not in EMOTION_MAP:
-			for em in EMOTION_MAP:
-				if em.lower() == emotion.lower():
-					data["emotion"] = em
-					break
-			else:
-				data["emotion"] = "Neutral"
-				
-		data["emotion_intensity"] = intensity
-		data.setdefault("emotion_reason", "I feel this way based on how the conversation has been going.")
-		
-		
-		self.emotion_system.experience_emotion(
-			data["emotion"],
-			intensity/10
-		)
 		
 		if self.show_thoughts:
 			print("AI thoughts:")
@@ -89,9 +97,47 @@ class ThoughtSystem:
 				print(f"- {thought}")
 			print()
 			
-			#print(f"Emotion: {data['emotion']}")
-#		
-#			print(f"Emotion influence: {data['emotion_influence']}")
+		continue_thinking = data["further_thought_needed"]
+		max_steps = 5
+		
+		num_steps = 0
+		while continue_thinking:
+			num_steps += 1
+			thought_history.append({
+				"role": "user",
+				"content": HIGHER_ORDER_THOUGHTS
+			})
+			new_data = self.model.generate(
+				thought_history,
+				temperature=0.7,
+				presence_penalty=0.5,
+				return_json=True
+			)
+			new_data = self._check_and_fix_thought_output(new_data)
+			thought_history.append({
+				"role": "assistant",
+				"content": json.dumps(new_data, indent=4)
+			})
+			if self.show_thoughts:
+				print(new_data)
+				print("Higher-order thoughts:")
+				for thought in new_data["thoughts"]:
+					print(f"- {thought}")
+				print()
+			
+			all_thoughts = data["thoughts"] + new_data["thoughts"]
+			data = new_data.copy()
+			data["thoughts"] = all_thoughts
+			continue_thinking = data["further_thought_needed"] and num_steps < max_steps
+			
+		intensity = data["emotion_intensity"]
+		emotion = data["emotion"]
+		insights = data["high_level_insights"]
+		
+		self.emotion_system.experience_emotion(
+			data["emotion"],
+			intensity/10
+		)
 		
 		if insights:
 			# Add new insights gained into memory
@@ -100,29 +146,5 @@ class ThoughtSystem:
 				print(f"- {insight}")
 				self.memory_system.remember(f"I gained an insight while chatting with the user: {insight}")
 			print()
-			
-		order = int(data.get("further_thought_needed", 0))
-		#print(f"Order: {order}")
-		for _ in range(order):
-			thought_history.append({
-				"role": "user",
-				"content": HIGHER_ORDER_THOUGHTS
-			})
-			new_thoughts = self.model.generate(
-				thought_history,
-				temperature=0.7,
-				presence_penalty=0.5,
-				return_json=True
-			)
-			thought_history.append({
-				"role": "assistant",
-				"content": json.dumps(data, indent=4)
-			})
-			if self.show_thoughts:
-				print("Higher-order thoughts:")
-				for thought in new_thoughts["thoughts"]:
-					print(f"- {thought}")
-				print()
-			data["thoughts"].extend(new_thoughts["thoughts"])
-			
+		
 		return data
