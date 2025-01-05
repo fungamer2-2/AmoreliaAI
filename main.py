@@ -98,30 +98,62 @@ def suggest_responses(conversation):
 		return_json=True
 	)
 	return data["possible_responses"]
-
-
-class AISystem:
-
-	def __init__(self):
-		self.model = MistralLLM("mistral-large-latest")
 	
-		self.personality_system = PersonalitySystem(
+from pydantic import BaseModel, Field
+
+class PersonalityConfig(BaseModel):
+	open: float = Field(ge=-1.0, le=1.0)
+	conscientious: float = Field(ge=-1.0, le=1.0)
+	agreeable: float = Field(ge=-1.0, le=1.0)
+	extrovert: float = Field(ge=-1.0, le=1.0)
+	neurotic: float = Field(ge=-1.0, le=1.0)
+	
+
+class AIConfig(BaseModel):
+	name: str = Field(default="AI")
+	system_prompt: str = Field(
+		default=AI_SYSTEM_PROMPT
+	)
+	personality: PersonalityConfig = Field(
+		default_factory=lambda: PersonalityConfig(
 			open=0.45,
 			conscientious=0.25,
 			extrovert=0.18,
 			agreeable=0.93,
 			neurotic=-0.15
 		)
-		self.memory_system = MemorySystem()
+	)
+
+
+class AISystem:
+
+	def __init__(self, config=None):
+		config = config or AIConfig()
+		
+		personality = config.personality
+		
+		self.config = config
+		self.model = MistralLLM("mistral-large-latest")
+		self.name = config.name
+		self.personality_system = PersonalitySystem(
+			open=personality.open,
+			conscientious=personality.conscientious,
+			extrovert=personality.extrovert,
+			agreeable=personality.agreeable,
+			neurotic=personality.neurotic
+		)
+		self.memory_system = MemorySystem(config)
 		self.relation_system = RelationshipSystem()
 		self.emotion_system = EmotionSystem(
 			self.personality_system,
 			self.relation_system
 		)
 		self.thought_system = ThoughtSystem(
+			config,
 			self.emotion_system,
 			self.memory_system,
-			self.relation_system
+			self.relation_system,
+			self.personality_system
 		)
 		
 		self.last_message = datetime.now()
@@ -129,12 +161,8 @@ class AISystem:
 		self.last_tick = datetime.now()
 		
 		self.buffer = MessageBuffer(20)
-		self.buffer.set_system_prompt(self.get_system_prompt())
-		
-	def get_system_prompt(self):
-		prompt = AI_SYSTEM_PROMPT + "\n\nYour Personality Description: " + self.personality_system.get_summary()
-		return prompt
-		
+		self.buffer.set_system_prompt(config.system_prompt)
+	
 	def get_message_history(self, include_system_prompt=True):
 		return self.buffer.to_list(include_system_prompt)
 		
@@ -155,7 +183,7 @@ class AISystem:
 	def send_message(self, user_input):
 		self.tick()
 		self.last_message = datetime.now()
-		self.buffer.set_system_prompt(self.get_system_prompt())
+		self.buffer.set_system_prompt(self.config.system_prompt)
 
 		self.buffer.add_message("user", user_input)
 		
@@ -179,7 +207,9 @@ class AISystem:
 		)
 		
 		history[-1]["content"] = USER_TEMPLATE.format(
+			name=self.config.name,
 			user_input=history[-1]["content"],
+			personality_summary=self.personality_system.get_summary(),
 			ai_thoughts="\n".join("- " + thought for thought in thought_data["thoughts"]),
 			emotion=thought_data["emotion"],
 			emotion_reason=thought_data["emotion_reason"],
@@ -193,7 +223,7 @@ class AISystem:
 			history,
 			temperature=0.7
 		)
-		self.memory_system.remember(f"User: {user_input}\n\nAI: {response}")
+		self.memory_system.remember(f"User: {user_input}\n\n{self.name}: {response}")
 		self.tick()
 		self.buffer.add_message("assistant", response)		
 		return response

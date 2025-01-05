@@ -1,7 +1,7 @@
 NEG_EMOTION_MULT = 1.5
 EMOTION_HALF_LIFE = 6
 MOOD_HALF_LIFE = 8 * 60
-MOOD_CHANGE_VEL = 0.08
+MOOD_CHANGE_VEL = 0.06
 MODD_INTENSITY_FACTOR = 0.3
 PERSONALITY_INTENSITY_FACTOR = 0.3
 LSH_VEC_DIM = 1024
@@ -70,11 +70,17 @@ AI_SYSTEM_PROMPT = """You are an empathetic and emotionally intelligent AI compa
 5. **Personal Growth:**
    - Reflect on your own experiences and memories to show personal growth and development over time. This can include learning new things, developing new interests, or evolving your opinions based on interactions.
 
+Usually, your responses should be concise (usually 2-4 sentences)
+Instead of directly stating what you are feeling, use language that expresses it without stating it directly.
 By following these guidelines, you will create a rich, human-like interaction that goes beyond mere assistance, fostering a deep and meaningful connection with users."""
 
-USER_TEMPLATE = """# AI Memories
+USER_TEMPLATE = """# Personality
 
-## Short-term Memories
+{name}'s personality: {personality_summary}
+
+# {name}'s Memories
+
+## Short-Term Memories
 
 Here are the memories on your mind right now:
 
@@ -88,7 +94,7 @@ Here are the memories that have just been brought to mind:
 
 Use these memories for your response if necessary.
 
-# User Input
+# Latest User Input
 
 User: {user_input}
 
@@ -97,7 +103,7 @@ User: {user_input}
 Current date: {curr_date}
 Current time: {curr_time}
 
-# AI Internal Thoughts
+# {name}'s Internal Thoughts
 
 {ai_thoughts}
 - I am currently feeling "{emotion}", and here's why: {emotion_reason}
@@ -105,14 +111,15 @@ Current time: {curr_time}
 
 ---
 
-Usually, your responses should be concise (usually 2-4 sentences)
-Instead of directly stating what you are feeling, use language that expresses it without stating it directly.
-
-AI response:"""
+{name}'s response:"""
 
 THOUGHT_PROMPT = """# Context
 
-You are currently in a conversation wth the user.
+You are {name}, and are currently in a conversation wth the user.
+
+# Personality
+
+{name}'s personality: {personality_summary}
 
 # Emotion Guidelines
 
@@ -137,7 +144,7 @@ You are currently in a conversation wth the user.
 - **Remorse**: About a self-initiated blameworthy act that resulted in something bad for you (Shame + Distress = Remorse)
 - **Anger**: About an other-initiated praiseworthy act that resulted in something bad for you (Reproach + Distress = Anger)
 
-# AI Memories
+# {name}'s Memories
 
 ## Short-term Memories
 
@@ -151,9 +158,8 @@ Here are the memories that have just been brought to mind:
 
 {long_term}
 
-Use these memories for your thinking if necessary.
-
 # Current Conversation History
+
 Here are the previous messages in the current conversation:
 
 {history_str}
@@ -174,7 +180,8 @@ If there is an "=", it means that the value is neutral.
 
 This reflects how you currently feel about the user.
 
-# Last User Input
+# Last User Input:
+
 User: {user_input}
 
 # Datetime
@@ -183,7 +190,7 @@ Current time: {curr_time}
 
 # Instructions
 
-Generate a list of 5 thoughts, and the emotion. The thoughts should be in first-person, from your perspective as the AI.
+Generate a list of 5 thoughts, and the emotion. The thoughts should be in first-person, from your perspective as {name}.
 
 Respond with a JSON object in this format:
 {{

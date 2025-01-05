@@ -246,7 +246,8 @@ class LongTermMemory:
 
 class MemorySystem:
 	
-	def __init__(self):
+	def __init__(self, config):
+		self.config = config
 		self.short_term = ShortTermMemory()
 		self.long_term = LongTermMemory()
 		self.last_memory = datetime.now() 
@@ -296,7 +297,7 @@ class MemorySystem:
 	def retrieve_memories(self, messages):
 		role_map = {
 			"user": "User",
-			"assistant": "AI"
+			"assistant": self.config.name
 		}
 		messages = [msg for msg in messages if msg["role"] != "system"]
 		context = "\n".join(

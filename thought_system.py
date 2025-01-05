@@ -9,14 +9,18 @@ class ThoughtSystem:
 	
 	def __init__(
 		self,
+		config,
 		emotion_system,
 		memory_system,
-		relation_system
+		relation_system,
+		personality_system
 	):
 		self.model = MistralLLM("mistral-large-latest")
+		self.config = config
 		self.emotion_system = emotion_system
 		self.memory_system = memory_system
 		self.relation_system = relation_system
+		self.personality_system = personality_system
 		self.show_thoughts = True
 		
 	def _check_and_fix_thought_output(self, data):
@@ -40,7 +44,6 @@ class ThoughtSystem:
 		
 		return data		
 		
-		
 	def think(
 		self,
 		messages,
@@ -49,7 +52,7 @@ class ThoughtSystem:
 	):
 		role_map = {
 			"user": "User",
-			"assistant": "AI"
+			"assistant": self.config.name
 		}
 		history_str = "\n\n".join(
 			f"{role_map[msg['role']]}: {msg['content']}"
@@ -63,7 +66,9 @@ class ThoughtSystem:
 			
 		prompt = THOUGHT_PROMPT.format(
 			history_str=history_str,
+			name=self.config.name,
 			user_input=messages[-1]["content"],
+			personality_summary=self.personality_system.get_summary(),
 			mood_long_desc=self.emotion_system.get_mood_long_description(),
 			curr_date=datetime.now().strftime("%a, %-m/%-d/%Y"),
 			curr_time=datetime.now().strftime("%-I:%M %p"),
@@ -74,7 +79,7 @@ class ThoughtSystem:
 		)
 		 
 		thought_history = [
-			{"role":"system", "content":AI_SYSTEM_PROMPT},
+			{"role":"system", "content":self.config.system_prompt},
 			{"role":"user", "content":prompt}
 		]
 		data = self.model.generate(
@@ -92,7 +97,7 @@ class ThoughtSystem:
 		})
 		
 		if self.show_thoughts:
-			print("AI thoughts:")
+			print(f"{self.config.name}'s thoughts:")
 			for thought in data["thoughts"]:
 				print(f"- {thought}")
 			print()
