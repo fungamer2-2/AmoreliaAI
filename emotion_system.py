@@ -45,7 +45,6 @@ class PersonalitySystem:
 		
 	def get_summary(self):
 		if not self.summary:
-			print("Summarizing personality values...")
 			self.summary = summarize_personality(
 				self.open,
 				self.conscientious,
@@ -276,12 +275,14 @@ class EmotionSystem:
 	def _get_mood_word(self, val, pos_str, neg_str):
 		if abs(val) < 0.04:
 			return "neutral"
-		if abs(val) > 0.67:
+		if abs(val) > 0.9:
+			adv = "extremely"
+		elif abs(val) > 0.65:
 			adv = "very"
-		elif abs(val) > 0.33:
+		elif abs(val) > 0.35:
 			adv = "moderately"
 		else:
-			adv = "slightly"
+			adv = "slightly "
 		
 		return adv + " " + (pos_str if val >= 0 else neg_str)
 			

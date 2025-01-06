@@ -44,12 +44,7 @@ class ThoughtSystem:
 		
 		return data		
 		
-	def think(
-		self,
-		messages,
-		short_term_memories,
-		long_term_memories
-	):
+	def think(self, messages, memories):
 		role_map = {
 			"user": "User",
 			"assistant": self.config.name
@@ -61,9 +56,8 @@ class ThoughtSystem:
 		mood_prompt = self.emotion_system.get_mood_prompt()
 		mood = self.emotion_system.mood
 		
-		short_term = "\n".join(mem.format_memory() for mem in short_term_memories)
-		long_term = "\n".join(mem.format_memory() for mem in long_term_memories)
-			
+		memories_str = "\n".join(mem.format_memory() for mem in memories)
+		
 		prompt = THOUGHT_PROMPT.format(
 			history_str=history_str,
 			name=self.config.name,
@@ -73,8 +67,7 @@ class ThoughtSystem:
 			curr_date=datetime.now().strftime("%a, %-m/%-d/%Y"),
 			curr_time=datetime.now().strftime("%-I:%M %p"),
 			mood_prompt=mood_prompt,
-			short_term=short_term,
-			long_term=long_term,
+			memories=memories_str,
 			relationship_str = self.relation_system.get_string()
 		)
 		 

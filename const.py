@@ -80,19 +80,9 @@ USER_TEMPLATE = """# Personality
 
 # {name}'s Memories
 
-## Short-Term Memories
-
 Here are the memories on your mind right now:
 
-{short_term}
-
-## Long-term Memories
-
-Here are the memories that have just been brought to mind:
-
-{long_term}
-
-Use these memories for your response if necessary.
+{memories}
 
 # Latest User Input
 
@@ -146,17 +136,9 @@ You are {name}, and are currently in a conversation wth the user.
 
 # {name}'s Memories
 
-## Short-term Memories
-
 Here are the memories on your mind right now:
 
-{short_term}
-
-## Long-term Memories
-
-Here are the memories that have just been brought to mind:
-
-{long_term}
+{memories}
 
 # Current Conversation History
 
@@ -185,6 +167,7 @@ This reflects how you currently feel about the user.
 User: {user_input}
 
 # Datetime
+
 Current date: {curr_date}
 Current time: {curr_time}
 

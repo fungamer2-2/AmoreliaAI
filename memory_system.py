@@ -304,6 +304,5 @@ class MemorySystem:
 			f"{role_map[msg['role']]}: {msg['content']}"
 			for msg in messages[-3:]  # Use the last few messages as context		
 		)
-		short_term_memories = self.short_term.get_memories()
-		long_term_memories = self.recall(context)
-		return short_term_memories, long_term_memories	
+		self.recall(context)
+		return self.short_term.get_memories()

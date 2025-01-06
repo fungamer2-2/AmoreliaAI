@@ -191,21 +191,21 @@ class AISystem:
 		
 		mood = self.get_mood()
 		
-		short_term_memories, long_term_memories = self.memory_system.retrieve_memories(history)
-		short_term = "\n".join(mem.format_memory() for mem in short_term_memories)
-		long_term = "\n".join(mem.format_memory() for mem in long_term_memories)
-		#print("Short term:")
-#		print("\n".join(mem.format_memory(debug=True) for mem in short_term_memories))
-#		print()
-#		print("Long term:")
-#		print("\n".join(mem.format_memory(debug=True) for mem in long_term_memories))
-#		print()
-		thought_data = self.thought_system.think(
-			self.get_message_history(False),
-			short_term_memories,
-			long_term_memories
+		memories = self.memory_system.retrieve_memories(history)
+		memories_str = (
+			"\n".join(mem.format_memory() for mem in memories)
+			if memories 
+			else "You don't have any memories of this user yet!"
 		)
 		
+		#print("Memories:")
+#		print("\n".join(mem.format_memory(debug=True) for mem in memories))
+#		print()
+
+		thought_data = self.thought_system.think(
+			self.get_message_history(False),
+			memories
+		)
 		history[-1]["content"] = USER_TEMPLATE.format(
 			name=self.config.name,
 			user_input=history[-1]["content"],
@@ -216,8 +216,7 @@ class AISystem:
 			emotion_influence=thought_data["emotion_influence"],
 			curr_date=datetime.now().strftime("%a, %-m/%-d/%Y"),
 			curr_time=datetime.now().strftime("%-I:%M %p"),
-			short_term=short_term,
-			long_term=long_term
+			memories=memories_str
 		)
 		response = self.model.generate(
 			history,
@@ -304,14 +303,17 @@ def command_parse(string):
 
 
 ai = AISystem.load(SAVE_PATH)
-if ai:
-	print("AI loaded.")
-else:
+is_new = ai is None
+if is_new:
 	ai = AISystem()
+	print("AI system initialized.")
+else:
+	print("AI loaded.")
+	
 
 ai.on_startup()
-ai.save(SAVE_PATH)
-
+if not is_new:
+	ai.save(SAVE_PATH)
 
 print(f"{Fore.yellow}Note: It's recommended not to enter any sensitive information.{Style.reset}")
 
