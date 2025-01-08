@@ -134,7 +134,7 @@ class LSHMemory:
 			sample_size = min(5, len(self.table[hash_ind]))
 			sample = random.sample(self.table[hash_ind], sample_size)
 			recalled.extend(sample)
-			weights.extend([mem.strength for mem in sample_size])
+			weights.extend([mem.strength for mem in sample])
 		
 		if len(recalled) > 5:
 			new_recalled = []
