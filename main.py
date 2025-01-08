@@ -197,11 +197,6 @@ class AISystem:
 			if memories 
 			else "You don't have any memories of this user yet!"
 		)
-		
-		#print("Memories:")
-#		print("\n".join(mem.format_memory(debug=True) for mem in memories))
-#		print()
-
 		thought_data = self.thought_system.think(
 			self.get_message_history(False),
 			memories
@@ -356,6 +351,10 @@ while True:
 			ai.emotion_system.reset_mood()	
 		elif command == "consolidate_memories":
 			ai.memory_system.consolidate_memories()
+		elif command == "memories":
+			print("Current memories:")
+			for memory in ai.memory_system.get_short_term_memories():
+				print(memory.format_memory())
 		elif command == "suggest":
 			history = ai.get_message_history(False)
 			
@@ -376,7 +375,6 @@ while True:
 					clear_screen()
 					ai = AISystem()
 					ai.on_startup()
-	
 		continue
 	
 	print()

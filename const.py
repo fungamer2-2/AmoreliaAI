@@ -1,7 +1,7 @@
 NEG_EMOTION_MULT = 1.5
 EMOTION_HALF_LIFE = 6
 MOOD_HALF_LIFE = 8 * 60
-MOOD_CHANGE_VEL = 0.06
+MOOD_CHANGE_VEL = 0.07
 MODD_INTENSITY_FACTOR = 0.3
 PERSONALITY_INTENSITY_FACTOR = 0.3
 LSH_VEC_DIM = 1024
@@ -183,11 +183,14 @@ Respond with a JSON object in this format:
 	"emotion_intensity": int,  // The emotion intensity, on a scale from 1 to 10,
 	"emotion_influence": str,  // How will this emotion influence your response? Describe it in a sentence or two.
 	"high_level_insights": list[str]  // If there are any high-level insights that you can infer from the above information that are likely to be worth remembering long-term, if any (e.g. 'The user seems...', 'The user likes...', 'The user is...'). Insights will be added to memory. Do not repeat insights that have already been made. If there is nothing important to return, return an empty list (`[]`) corresponding to the `insights` key.
-	"further_thought_needed": bool,  // If you feel you need more time to think, set to true. If you feel ready to give a final answer, set to false.
+	"next_action": str,  // If you feel you need more time to think, set to "continue". If you feel ready to give a final answer, set to "final_answer".
 }}
+
+Note: For more complex questions or anything that necessitates deeper thought, you can chain thought sequences simply by setting 'next_action' to 'continue'.
 
 Your thoughts should reflect your current_mood above.
 Remember, the user will not see these thoughts, so do not use the words 'you' or 'your' in internal thoughts.
+However, make the thoughts as interesting and creative as possible - it doesn't matter.
 When choosing the emotion, remember to follow the emotion_guidelines above, as they are based on the OCC model of appraisal.
 Pay special attention to your current_mood and ai_memories.
 

@@ -25,6 +25,7 @@ class ThoughtSystem:
 		
 	def _check_and_fix_thought_output(self, data):
 		data = data.copy()
+		data.setdefault("thoughts", [])
 		data.setdefault("emotion_intensity", 5)
 		data["emotion_intensity"] = int(data["emotion_intensity"])
 		
@@ -75,12 +76,16 @@ class ThoughtSystem:
 			{"role":"system", "content":self.config.system_prompt},
 			{"role":"user", "content":prompt}
 		]
-		data = self.model.generate(
-			thought_history,
-			temperature=0.7,
-			presence_penalty=0.5,
-			return_json=True
-		)
+		for _ in range(3):
+			data = self.model.generate(
+				thought_history,
+				temperature=0.7,
+				return_json=True
+			)
+			if isinstance(data, dict):
+				break
+		else:
+			data = {}
 		
 		data = self._check_and_fix_thought_output(data)
 		
@@ -95,7 +100,7 @@ class ThoughtSystem:
 				print(f"- {thought}")
 			print()
 			
-		continue_thinking = data["further_thought_needed"]
+		continue_thinking = data["next_action"] == "continue"
 		max_steps = 5
 		
 		num_steps = 0
@@ -126,7 +131,7 @@ class ThoughtSystem:
 			all_thoughts = data["thoughts"] + new_data["thoughts"]
 			data = new_data.copy()
 			data["thoughts"] = all_thoughts
-			continue_thinking = data["further_thought_needed"] and num_steps < max_steps
+			continue_thinking = data["next_action"] == "continue" and num_steps < max_steps
 			
 		intensity = data["emotion_intensity"]
 		emotion = data["emotion"]

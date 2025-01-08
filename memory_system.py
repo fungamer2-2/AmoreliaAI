@@ -24,12 +24,12 @@ class Memory:
 		self.content = content
 		self.embedding = None
 		self.id = str(uuid.uuid4())
-		self.strength = 0	
+		self.strength = 1	
 
 	def get_recency_factor(self):
 		seconds = (datetime.now() - self.last_accessed).total_seconds()
 		days = seconds / 86400
-		return math.exp(-days / ((self.strength + 1) * MEMORY_DECAY_TIME_MULT))
+		return math.exp(-days / (self.strength * MEMORY_DECAY_TIME_MULT))
 	
 	def get_retention_prob(self):
 		# The probability of retaining this memory per 24 hours
@@ -37,7 +37,7 @@ class Memory:
 		threshold = 0.6
 		if recency > threshold:
 			return 1.0
-		return math.exp(-1 / (MEMORY_DECAY_TIME_MULT * (self.strength + 1)))
+		return math.exp(-1 / (MEMORY_DECAY_TIME_MULT * self.strength))
 
 	def reinforce(self): 
 		self.strength += 1
@@ -127,15 +127,24 @@ class LSHMemory:
 	def recall_random(self, remove=False):
 		# Recall a random subset of memories
 		recalled = []
+		weights = []
 		for hash_ind in self.table:
 			if not self.table[hash_ind]:
 				continue
-			sample_size = min(3, len(self.table[hash_ind]))
+			sample_size = min(5, len(self.table[hash_ind]))
 			sample = random.sample(self.table[hash_ind], sample_size)
 			recalled.extend(sample)
+			weights.extend([mem.strength for mem in sample_size])
 		
 		if len(recalled) > 5:
-			recalled = random.sample(recalled, 5)
+			new_recalled = []
+			for _ in range(5):
+				choice = random.choices(recalled, weights)[0]
+				ind = recalled.index(choice)
+				new_recalled.append(recalled.pop(ind))
+				weights.pop(ind)
+			
+			recalled = new_recalled
 
 		if remove:
 			for mem in recalled:
@@ -305,4 +314,4 @@ class MemorySystem:
 			for msg in messages[-3:]  # Use the last few messages as context		
 		)
 		self.recall(context)
-		return self.short_term.get_memories()
+		return self.get_short_term_memories()
