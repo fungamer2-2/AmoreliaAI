@@ -6,7 +6,8 @@ import traceback
 from collections import deque
 from datetime import datetime
 
-from colored import Fore, Style
+from colored import Fore, Style	
+from pydantic import BaseModel, Field
 
 from llm import MistralLLM
 from utils import clear_screen
@@ -98,8 +99,7 @@ def suggest_responses(conversation):
 		return_json=True
 	)
 	return data["possible_responses"]
-	
-from pydantic import BaseModel, Field
+
 
 class PersonalityConfig(BaseModel):
 	open: float = Field(ge=-1.0, le=1.0)
@@ -162,7 +162,7 @@ class AISystem:
 		
 		self.buffer = MessageBuffer(20)
 		self.buffer.set_system_prompt(config.system_prompt)
-	
+		
 	def get_message_history(self, include_system_prompt=True):
 		return self.buffer.to_list(include_system_prompt)
 		
@@ -201,6 +201,11 @@ class AISystem:
 			self.get_message_history(False),
 			memories
 		)
+		user_emotions = thought_data["possible_user_emotions"]
+		if user_emotions:
+			user_emotion_str = "The user appears to be feeling the following emotions: " + ", ".join(user_emotions) + "."
+		else:
+			user_emotion_str = "The user doesn't appear to show any strong emotion."
 		history[-1]["content"] = USER_TEMPLATE.format(
 			name=self.config.name,
 			user_input=history[-1]["content"],
@@ -211,11 +216,13 @@ class AISystem:
 			emotion_influence=thought_data["emotion_influence"],
 			curr_date=datetime.now().strftime("%a, %-m/%-d/%Y"),
 			curr_time=datetime.now().strftime("%-I:%M %p"),
-			memories=memories_str
+			memories=memories_str,
+			user_emotion_str=user_emotion_str
 		)
 		response = self.model.generate(
 			history,
-			temperature=0.7
+			temperature=0.8,
+			presence_penalty=0.6
 		)
 		self.memory_system.remember(f"User: {user_input}\n\n{self.name}: {response}")
 		self.tick()

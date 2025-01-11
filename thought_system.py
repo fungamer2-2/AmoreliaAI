@@ -25,7 +25,6 @@ class ThoughtSystem:
 		
 	def _check_and_fix_thought_output(self, data):
 		data = data.copy()
-		data.setdefault("thoughts", [])
 		data.setdefault("emotion_intensity", 5)
 		data["emotion_intensity"] = int(data["emotion_intensity"])
 		
@@ -41,7 +40,7 @@ class ThoughtSystem:
 			else:
 				data["emotion"] = "Neutral"
 		
-		data.setdefault("further_thought_needed", False)
+		data.setdefault("next_action", "final_answer")
 		
 		return data		
 		
@@ -76,19 +75,14 @@ class ThoughtSystem:
 			{"role":"system", "content":self.config.system_prompt},
 			{"role":"user", "content":prompt}
 		]
-		for _ in range(3):
-			data = self.model.generate(
-				thought_history,
-				temperature=0.7,
-				return_json=True
-			)
-			if isinstance(data, dict):
-				break
-		else:
-			data = {}
+		data = self.model.generate(
+			thought_history,
+			temperature=0.8,
+			return_json=True
+		)
 		
 		data = self._check_and_fix_thought_output(data)
-		
+		#print(data["possible_user_emotions"])
 		thought_history.append({
 			"role": "assistant",
 			"content": json.dumps(data, indent=4)
@@ -100,7 +94,7 @@ class ThoughtSystem:
 				print(f"- {thought}")
 			print()
 			
-		continue_thinking = data["next_action"] == "continue"
+		continue_thinking = data["next_action"].lower() == "continue"
 		max_steps = 5
 		
 		num_steps = 0
@@ -122,7 +116,6 @@ class ThoughtSystem:
 				"content": json.dumps(new_data, indent=4)
 			})
 			if self.show_thoughts:
-				print(new_data)
 				print("Higher-order thoughts:")
 				for thought in new_data["thoughts"]:
 					print(f"- {thought}")
@@ -131,7 +124,7 @@ class ThoughtSystem:
 			all_thoughts = data["thoughts"] + new_data["thoughts"]
 			data = new_data.copy()
 			data["thoughts"] = all_thoughts
-			continue_thinking = data["next_action"] == "continue" and num_steps < max_steps
+			continue_thinking = data["next_action"].lower() == "continue" and num_steps < max_steps
 			
 		intensity = data["emotion_intensity"]
 		emotion = data["emotion"]
