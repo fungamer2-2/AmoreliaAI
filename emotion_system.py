@@ -216,6 +216,7 @@ class RelationshipSystem:
 		pleasure, _, dominance = EMOTION_MAP[emotion]
 		pleasure *= intensity
 		dominance *= intensity
+		
 		self.friendliness += pleasure * relation_change_mult
 		self.dominance += dominance * relation_change_mult
 		

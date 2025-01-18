@@ -3,6 +3,7 @@ import numpy as np
 import random
 import math
 
+from heapq import nlargest
 from collections import deque
 from datetime import datetime
 from rank_bm25 import BM25Okapi
@@ -66,6 +67,7 @@ class LSHMemory:
 		self.memory_ids = {}
 		rng = np.random.default_rng(seed=42)
 		self.rand = rng.normal(size=(embed_size, nbits))
+		self.count = 0
 		
 	def _get_hash(self, vec):
 		proj = np.dot(vec, self.rand)
@@ -77,6 +79,7 @@ class LSHMemory:
 		return hash_ind
 		
 	def add_memory(self, memory):
+		self.count += 1
 		vec = memory.embedding
 		hash_ind = self._get_hash(vec)
 		self.table.setdefault(hash_ind, [])
@@ -91,9 +94,13 @@ class LSHMemory:
 		for i in range(len(bucket)):
 			if bucket[i].id == memory.id:
 				del bucket[i]
+				del self.memory_ids[memory.id]
+				self.count -= 1
 				break
 		
 	def retrieve(self, query, k, remove=False):
+		if not self.count:
+			return []
 		query_vec = mistral_embed_texts(query)
 		hash_ind = self._get_hash(query_vec)
 		
@@ -190,6 +197,18 @@ class ShortTermMemory:
 	def get_memories(self):
 		return list(self.memories)
 		
+	def retrieve(self, query, k):
+		if not self.memories:
+			return []
+		corpus = [memory.content for memory in self.memories]
+		tokenized_corpus = [normalize_text(text).split() for text in corpus]
+		bm25 = BM25Okapi(tokenized_corpus)
+		scores = bm25.get_scores(normalize_text(query).split())
+		ranked_memories = list(zip(self.memories, scores))
+		
+		top_memories = nlargest(k, ranked_memories, key=lambda p: p[1])
+		return [mem for mem, _ in top_memories]
+			
 	def rehearse(self, query):
 		if not self.memories:
 			return
@@ -303,7 +322,13 @@ class MemorySystem:
 	def get_short_term_memories(self):
 		return self.short_term.get_memories()
 		
-	def retrieve_memories(self, messages):
+	def retrieve_long_term(self, query, top_k):
+		return self.long_term.retrieve(query, top_k, remove=False)
+	
+	def retrieve_short_term(self, query, top_k):
+		return self.short_term.retrieve(query, top_k)
+	
+	def recall_memories(self, messages):
 		role_map = {
 			"user": "User",
 			"assistant": self.config.name

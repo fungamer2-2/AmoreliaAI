@@ -191,7 +191,9 @@ class AISystem:
 		
 		mood = self.get_mood()
 		
-		memories = self.memory_system.retrieve_memories(history)
+		memories = self.memory_system.recall_memories(history)
+		memories.sort(key=lambda memory: memory.timestamp)
+		
 		memories_str = (
 			"\n".join(mem.format_memory() for mem in memories)
 			if memories 
@@ -225,6 +227,7 @@ class AISystem:
 			presence_penalty=0.6
 		)
 		self.memory_system.remember(f"User: {user_input}\n\n{self.name}: {response}")
+		
 		self.tick()
 		self.buffer.add_message("assistant", response)		
 		return response
@@ -233,6 +236,8 @@ class AISystem:
 		now = datetime.now()
 		dt = (now - self.last_tick).total_seconds()
 		self.emotion_system.tick()
+		if self.thought_system.can_reflect():
+			self.thought_system.reflect()
 		self.memory_system.tick(dt)
 		if dt > 2 * 3600:
 			self.memory_system.surface_random_thoughts()

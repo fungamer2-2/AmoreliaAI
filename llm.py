@@ -42,6 +42,7 @@ def mistral_request(messages, model, **kwargs):
 	
 	
 	return response.json()
+
 	
 def mistral_embed_texts(inputs):
 	api_key = os.getenv("MISTRAL_API_KEY")
@@ -76,6 +77,17 @@ def mistral_embed_texts(inputs):
 	return [obj["embedding"] for obj in embed_res["data"]]
 
 
+def _convert_system_to_user(messages):
+	new_messages = []
+	for msg in messages:
+		role = msg["role"]
+		content = msg["content"]
+		if role == "system":
+			role = "user"
+		new_messages.append({"role":role, "content":content})
+	return new_messages
+
+
 class MistralLLM:
 	
 	def __init__(self, model="mistral-large-latest"):
@@ -89,6 +101,9 @@ class MistralLLM:
 	):
 		if isinstance(prompt, str):
 			prompt = [{"role":"user", "content":prompt}]
+		
+		if self.model != "mistral-large-latest":
+			prompt = _convert_system_to_user(prompt)
 		
 		format = "json_object" if return_json else "text"
 			
@@ -106,3 +121,4 @@ class MistralLLM:
 			
 		return response
 	
+
