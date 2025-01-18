@@ -21,7 +21,7 @@ If you find a bug or have a feature request, feel free to [open an issue](https:
 
 Before responding, the AI is prompted to generate a list of thoughts from its perspective. These thoughts are treated as the AI's "inner monologue." This helps make it a bit more realistic, and think as if it truly had its own personality.
 
-Additionally, the AI is designed to look for and gather insights to add to its memory, in order to gain a higher-level understanding of the user.
+Periodically, the AI will reflect and gather insights to add to its memory, in order to gain a higher-level understanding of the user.
 
 ## Emotion system
 
