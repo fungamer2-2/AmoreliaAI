@@ -27,6 +27,8 @@ Periodically, the AI will reflect and gather insights to add to its memory, in o
 
 The emotion system is based on the PAD (Pleasure-Arousal-Dominance) state model. Interactions with the AI will elicit emotions, which affect its mood. Its current emotions may affect its responses.
 
+The AI's mood is updated based on its emotions it experiences in the conversation. If no emotions have been invoked recently, its mood will gradually return to its baseline mood.
+
 ## Memory system
 
 The AI companion also has a long-term memory system to recall relevant memories and insights from previous conversations. It includes two types of memory: short-term and long-term.
