@@ -114,6 +114,7 @@ class AIConfig(BaseModel):
 	system_prompt: str = Field(
 		default=AI_SYSTEM_PROMPT
 	)
+	model: str = "mistral-large-latest"
 	personality: PersonalityConfig = Field(
 		default_factory=lambda: PersonalityConfig(
 			open=0.45,
@@ -133,7 +134,7 @@ class AISystem:
 		personality = config.personality
 		
 		self.config = config
-		self.model = MistralLLM("mistral-large-latest")
+		self.model = MistralLLM(config.model)
 		self.name = config.name
 		self.personality_system = PersonalitySystem(
 			open=personality.open,
@@ -223,8 +224,7 @@ class AISystem:
 		)
 		response = self.model.generate(
 			history,
-			temperature=0.8,
-			presence_penalty=0.6
+			temperature=0.8
 		)
 		self.memory_system.remember(f"User: {user_input}\n\n{self.name}: {response}")
 		
@@ -268,7 +268,7 @@ def _try_convert_arg(arg):
 	except ValueError:
 		pass
 		
-	return arg			
+	return arg	
 
 
 def _parse_args(arg_list_str):
@@ -308,7 +308,6 @@ def command_parse(string):
 	return command, _parse_args(args)
 
 
-
 ai = AISystem.load(SAVE_PATH)
 is_new = ai is None
 if is_new:
@@ -325,8 +324,7 @@ if not is_new:
 print(f"{Fore.yellow}Note: It's recommended not to enter any sensitive information.{Style.reset}")
 
 while True:
-	ai.tick()
-	
+	ai.tick()	
 	ai.emotion_system.print_mood()
 	msg = input("User: ").strip()
 	if not msg:
@@ -388,8 +386,8 @@ while True:
 					ai = AISystem()
 					ai.on_startup()
 		continue
-	
 	print()
+	
 	try:
 		message = ai.send_message(msg)
 	except Exception as e:
@@ -397,6 +395,6 @@ while True:
 		traceback.print_exception(type(e), e, e.__traceback__)
 		print("Oops! There was an error processing your input. Please try again in a moment.")
 	else:
-		ai.save(SAVE_PATH)
 		print("AI: " + message)
+		ai.save(SAVE_PATH)
 	

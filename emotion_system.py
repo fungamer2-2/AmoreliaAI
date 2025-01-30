@@ -204,8 +204,8 @@ class RelationshipSystem:
 		
 	def tick(self, dt):
 		num_days = dt / 86400
-		self.friendliness *= math.exp(-num_days/60)
-		self.dominance *= math.exp(-num_days/60)
+		self.friendliness *= math.exp(-num_days/40)
+		self.dominance *= math.exp(-num_days/80)
 	
 	def on_emotion(self, emotion, intensity):
 		if emotion not in ["Joy", "Distress", "Admiration", "Reproach", "Gratitude", "Anger"]:

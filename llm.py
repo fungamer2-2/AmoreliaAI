@@ -25,13 +25,13 @@ def mistral_request(messages, model, **kwargs):
 	}
 	
 	max_delay = 20
-	for tries in range(7):
+	for tries in range(6):
 		response = requests.post(MISTRAL_API_CHAT_URL, json=data, headers=headers)
 		if response.ok:
 			break
 		elif response.status_code == 429:
-			wait_time = min(max_delay, 2 ** tries)
-			print(f"Waiting {wait_time} second(s)...")
+			wait_time = min(max_delay, 2 ** (tries + 1))
+			#print(f"Waiting {wait_time} second(s)...")
 			time.sleep(wait_time)
 		else:
 			print(response.text)
@@ -56,12 +56,13 @@ def mistral_embed_texts(inputs):
 		"input": inputs
 	}
 	
+	max_delay = 20
 	for tries in range(4):
 		response = requests.post(MISTRAL_API_EMBED_URL, json=data, headers=headers)
 		if response.ok:
 			break
 		elif response.status_code == 429:
-			wait_time = 2 ** tries
+			wait_time = min(max_delay, 2 ** (tries + 1))
 			#print(f"Waiting {wait_time} second(s)...")
 			time.sleep(wait_time)
 		else:
@@ -84,6 +85,7 @@ def _convert_system_to_user(messages):
 		content = msg["content"]
 		if role == "system":
 			role = "user"
+			content = f"<SYSTEM>{content}</SYSTEM>"
 		new_messages.append({"role":role, "content":content})
 	return new_messages
 
@@ -92,26 +94,37 @@ class MistralLLM:
 	
 	def __init__(self, model="mistral-large-latest"):
 		self.model = model
-	
+		
 	def generate(
 		self,
 		prompt,
 		return_json=False,
+		schema=None,
 		**kwargs
 	):
+		if schema and not return_json:
+			raise ValueError("return_json must be True if schema is provided")
 		if isinstance(prompt, str):
-			prompt = [{"role":"user", "content":prompt}]
-		
+			prompt = [{"role":"user", "content":prompt}]		
 		if self.model != "mistral-large-latest":
 			prompt = _convert_system_to_user(prompt)
 		
-		format = "json_object" if return_json else "text"
-			
+		if schema:
+			format = {
+				"type":"json_schema",
+				"json_schema":{
+					"name": "json_format",
+					"schema": schema,
+					"strict": True
+				}
+			}
+		else:
+			format = {"type":"json_object"} if return_json else {"type":"text"} 
 		response = mistral_request(
 			prompt,
 			**kwargs,
 			model=self.model,
-			response_format={"type":format}
+			response_format=format
 		)
 		
 		response = response["choices"][0]["message"]["content"]
@@ -121,4 +134,4 @@ class MistralLLM:
 			
 		return response
 	
-
+	

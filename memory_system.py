@@ -9,23 +9,53 @@ from datetime import datetime
 from rank_bm25 import BM25Okapi
 
 from const import * 
-from llm import mistral_embed_texts
+from llm import MistralLLM, mistral_embed_texts
 from utils import (
 	normalize_text,
 	get_approx_time_ago_str
 )
 
 
+IMPORTANCE_PROMPT = """Your task is to rate the importance of the given memory from 1 to 10.
+
+- A score of 1 represents trivial things or basic chit-chat with no information of importance.
+- A score of 10 represents things that are very important.
+
+Return ONLY an integer, nothing else. Your response must not contain any non-numeric characters.
+
+<memory>
+{memory}
+</memory>
+
+The importance score of the above memory is <fill_in_the_blank_here>/10.
+"""
+
+
+def get_importance(memory):
+	model = MistralLLM("open-mistral-nemo")
+	prompt = IMPORTANCE_PROMPT.format(
+		memory=memory
+	)
+	output = model.generate(prompt, temperature=0.0)
+	try:
+		score = int(output)
+	except ValueError:
+		#print("Error parsing response to integer; returning default score 3/10.")
+		score = 3
+	
+	return max(1, min(score, 10))
+
+
 class Memory:
 		
-	def __init__(self, content):
+	def __init__(self, content, strength=1):
 		now = datetime.now()
 		self.timestamp = now
 		self.last_accessed = now
 		self.content = content
 		self.embedding = None
 		self.id = str(uuid.uuid4())
-		self.strength = 1	
+		self.strength = strength	
 
 	def get_recency_factor(self):
 		seconds = (datetime.now() - self.last_accessed).total_seconds()
@@ -279,11 +309,18 @@ class MemorySystem:
 		self.short_term = ShortTermMemory()
 		self.long_term = LongTermMemory()
 		self.last_memory = datetime.now() 
+		self.importance_counter = 0.0
+		
+	def reset_importance(self):
+		self.importance_counter = 0.0
 		
 	def remember(self, content):
+		importance = get_importance(content)
+		strength = 1 + (importance - 1) / 2
 		self.last_memory = datetime.now()
-		self.short_term.add_memory(Memory(content))
-		
+		self.short_term.add_memory(Memory(content, strength=strength))
+		self.importance_counter += importance / 10
+	
 	def recall(self, query):
 		self.short_term.rehearse(query)
 		memories = self.long_term.retrieve(query, 3, remove=True)

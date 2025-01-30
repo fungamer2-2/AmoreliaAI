@@ -5,6 +5,7 @@ from emotion_system import Emotion
 from const import *
 import json
 
+
 class ThoughtSystem:
 	
 	def __init__(
@@ -15,7 +16,7 @@ class ThoughtSystem:
 		relation_system,
 		personality_system
 	):
-		self.model = MistralLLM("mistral-large-latest")
+		self.model = MistralLLM(config.model)
 		self.config = config
 		self.emotion_system = emotion_system
 		self.memory_system = memory_system
@@ -27,9 +28,9 @@ class ThoughtSystem:
 		
 	def can_reflect(self):
 		return (
-			self.reflection_counter >= 12
+			self.memory_system.importance_counter >= 9
 			and (datetime.now() - self.last_reflection).total_seconds() > 3 * 3600
-			and len(self.memory_system.get_short_term_memories()) >= 12
+			and len(self.memory_system.get_short_term_memories()) >= 10
 		)
 			
 	def reflect(self):	
@@ -74,7 +75,7 @@ class ThoughtSystem:
 			for insight in insights:
 				self.memory_system.remember(f"I gained an insight after reflection: {insight}")
 				print("- " + insight)
-		self.reflection_counter = 0
+		self.memory_system.reset_importance()
 		self.last_reflection = datetime.now()
 
 	def _check_and_fix_thought_output(self, data):
@@ -84,7 +85,6 @@ class ThoughtSystem:
 		
 		data.setdefault("thoughts", [])
 		data.setdefault("emotion", "Neutral")
-		data.setdefault("high_level_insights", [])
 		data.setdefault("emotion_reason", "I feel this way based on how the conversation has been going.")
 		
 		if data["emotion"] not in EMOTION_MAP:
@@ -100,8 +100,8 @@ class ThoughtSystem:
 		return data		
 		
 	def think(self, messages, memories):
-		self.reflection_counter += 1
-		print(f"Reflection counter: {self.reflection_counter}")
+		
+		print(f"Importance counter: {self.memory_system.importance_counter}")
 		role_map = {
 			"user": "User",
 			"assistant": self.config.name
@@ -140,7 +140,8 @@ class ThoughtSystem:
 			data = self.model.generate(
 				thought_history,
 				temperature=0.8,
-				return_json=True
+				return_json=True,
+				schema=THOUGHT_SCHEMA
 			)
 			if "thoughts" in data:
 				break
@@ -149,7 +150,7 @@ class ThoughtSystem:
 			
 			
 		data = self._check_and_fix_thought_output(data)
-		#print(data["possible_user_emotions"])
+		print(data)
 		thought_history.append({
 			"role": "assistant",
 			"content": json.dumps(data, indent=4)
@@ -178,6 +179,7 @@ class ThoughtSystem:
 				return_json=True
 			)
 			new_data = self._check_and_fix_thought_output(new_data)
+			print(new_data)
 			thought_history.append({
 				"role": "assistant",
 				"content": json.dumps(new_data, indent=4)
