@@ -36,8 +36,7 @@ class MessageBuffer:
 		self.messages.append({"role": role, "content": content})
 		
 	def pop(self):
-		msg = self.messages.pop()
-		return msg
+		return self.messages.pop()
 
 	def flush(self):
 		self.messages.clear()
@@ -251,7 +250,7 @@ class AISystem:
 	
 	@staticmethod		
 	def load(path):
-		import pickle, os
+		import pickle
 		if os.path.exists(path):
 			with open(path, "rb") as file:
 				return pickle.load(file)
@@ -391,7 +390,6 @@ while True:
 	try:
 		message = ai.send_message(msg)
 	except Exception as e:
-		import traceback
 		traceback.print_exception(type(e), e, e.__traceback__)
 		print("Oops! There was an error processing your input. Please try again in a moment.")
 	else:

@@ -106,7 +106,7 @@ class MistralLLM:
 			raise ValueError("return_json must be True if schema is provided")
 		if isinstance(prompt, str):
 			prompt = [{"role":"user", "content":prompt}]		
-		if self.model != "mistral-large-latest":
+		if self.model not in ["mistral-small-latest", "mistral-large-latest"]:
 			prompt = _convert_system_to_user(prompt)
 		
 		if schema:
@@ -133,5 +133,4 @@ class MistralLLM:
 			return json_repair.loads(response)
 			
 		return response
-	
 	

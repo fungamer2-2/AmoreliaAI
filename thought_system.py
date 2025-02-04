@@ -150,7 +150,7 @@ class ThoughtSystem:
 			
 			
 		data = self._check_and_fix_thought_output(data)
-		print(data)
+		#print(data)
 		thought_history.append({
 			"role": "assistant",
 			"content": json.dumps(data, indent=4)
@@ -179,7 +179,7 @@ class ThoughtSystem:
 				return_json=True
 			)
 			new_data = self._check_and_fix_thought_output(new_data)
-			print(new_data)
+			#print(new_data)
 			thought_history.append({
 				"role": "assistant",
 				"content": json.dumps(new_data, indent=4)
