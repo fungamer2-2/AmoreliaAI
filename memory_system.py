@@ -226,19 +226,7 @@ class ShortTermMemory:
 		
 	def get_memories(self):
 		return list(self.memories)
-		
-	def retrieve(self, query, k):
-		if not self.memories:
-			return []
-		corpus = [memory.content for memory in self.memories]
-		tokenized_corpus = [normalize_text(text).split() for text in corpus]
-		bm25 = BM25Okapi(tokenized_corpus)
-		scores = bm25.get_scores(normalize_text(query).split())
-		ranked_memories = list(zip(self.memories, scores))
-		
-		top_memories = nlargest(k, ranked_memories, key=lambda p: p[1])
-		return [mem for mem, _ in top_memories]
-			
+	
 	def rehearse(self, query):
 		if not self.memories:
 			return

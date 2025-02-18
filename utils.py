@@ -17,7 +17,7 @@ def num_to_str_sign(val, num_dec):
 	return sign + f.format(val)
 	
 
-def val_to_symbol_color(val, maxsize, color_pos, color_neg, val_scale=1.0):
+def val_to_symbol_color(val, maxsize, color_pos="", color_neg="", val_scale=1.0):
 	bars = round(abs(val / val_scale) * maxsize)
 	if bars == 0:
 		return "="
@@ -98,4 +98,15 @@ def normalize_text(text):
 	for c in contractions:
 		text = re.sub(rf"(\b)({c})(\b)", _replacement, text)
 	return text
+
+
+def conversation_to_string(messages, ai_name="AI"):	
+	role_map = {
+		"user": "User",
+		"assistant": ai_name
+	}
+	return "\n\n".join(
+		f"{role_map[msg['role']]}: {msg['content']}"
+		for msg in messages[:-1]
+	)
 	

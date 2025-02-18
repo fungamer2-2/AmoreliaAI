@@ -2,6 +2,7 @@ import time
 import re
 import os
 import traceback
+import json
 
 from collections import deque
 from datetime import datetime
@@ -157,30 +158,24 @@ class AISystem:
 		)
 		
 		self.last_message = datetime.now()
-		self.last_login = None
 		self.last_tick = datetime.now()
 		
 		self.buffer = MessageBuffer(20)
 		self.buffer.set_system_prompt(config.system_prompt)
+
 		
 	def get_message_history(self, include_system_prompt=True):
 		return self.buffer.to_list(include_system_prompt)
 		
 	def get_mood(self):
 		return self.emotion_system.mood
-		
-	def set_thoughts_shown(self, visible):
-		self.thought_system.show_thoughts = visible
-		
+			
 	def on_startup(self):
 		self.buffer.flush()
-		self.last_login = datetime.now()
-		
-		if not hasattr(self, "last_tick"):
-			self.last_tick = datetime.now()
+		self.last_tick = datetime.now()
 		self.tick()
 		
-	def send_message(self, user_input):
+	def send_message(self, user_input: str, return_json=False):
 		self.tick()
 		self.last_message = datetime.now()
 		self.buffer.set_system_prompt(self.config.system_prompt)
@@ -188,8 +183,6 @@ class AISystem:
 		self.buffer.add_message("user", user_input)
 		
 		history = self.get_message_history()
-		
-		mood = self.get_mood()
 		
 		memories = self.memory_system.recall_memories(history)
 		memories.sort(key=lambda memory: memory.timestamp)
@@ -208,6 +201,7 @@ class AISystem:
 			user_emotion_str = "The user appears to be feeling the following emotions: " + ", ".join(user_emotions) + "."
 		else:
 			user_emotion_str = "The user doesn't appear to show any strong emotion."
+		
 		history[-1]["content"] = USER_TEMPLATE.format(
 			name=self.config.name,
 			user_input=history[-1]["content"],
@@ -223,13 +217,21 @@ class AISystem:
 		)
 		response = self.model.generate(
 			history,
-			temperature=0.8
+			temperature=0.8,
+			return_json=return_json
 		)
+		
 		self.memory_system.remember(f"User: {user_input}\n\n{self.name}: {response}")
 		
 		self.tick()
-		self.buffer.add_message("assistant", response)		
+		new_response = response
+		if return_json:
+			new_response = json.dumps(response, indent=2)
+		self.buffer.add_message("assistant", new_response)		
 		return response
+		
+	def set_thought_visibility(self, shown: bool):
+		self.thought_system.show_thoughts = shown
 
 	def tick(self):
 		now = datetime.now()
@@ -254,6 +256,19 @@ class AISystem:
 		if os.path.exists(path):
 			with open(path, "rb") as file:
 				return pickle.load(file)
+		else:
+			return None
+			
+	@classmethod
+	def load_or_create(cls, path):
+		ai = cls.load(path)
+		if ai is None:
+			ai = AISystem()
+			print("AI system initialized.")
+		else:
+			print("AI loaded.")
+		ai.on_startup()
+		return ai
 
 
 def _try_convert_arg(arg):
@@ -307,92 +322,89 @@ def command_parse(string):
 	return command, _parse_args(args)
 
 
-ai = AISystem.load(SAVE_PATH)
-is_new = ai is None
-if is_new:
-	ai = AISystem()
-	print("AI system initialized.")
-else:
-	print("AI loaded.")
+def main():
+	ai = AISystem.load_or_create(SAVE_PATH)
+	print(f"{Fore.yellow}Note: It's recommended not to enter any sensitive information.{Style.reset}")
 	
-
-ai.on_startup()
-if not is_new:
-	ai.save(SAVE_PATH)
-
-print(f"{Fore.yellow}Note: It's recommended not to enter any sensitive information.{Style.reset}")
-
-while True:
-	ai.tick()	
-	ai.emotion_system.print_mood()
-	msg = input("User: ").strip()
-	if not msg:
-		continue
-		
-	if msg.startswith("/"):
-		command, args = command_parse(msg[1:])
-		if command == "set_pleasure" and len(args) == 1:
-			value = args[0]
-			if not isinstance(value, (int, float)):
-				continue
-			ai.emotion_system.set_emotion(pleasure=value)
-		if command == "set_arousal" and len(args) == 1:
-			value = args[0]
-			if not isinstance(value, (int, float)):
-				continue
-			ai.emotion_system.set_emotion(arousal=value)
-		elif command == "set_dominance" and len(args) == 1:
-			value = args[0]
-			if not isinstance(value, (int, float)):
-				continue
-			ai.emotion_system.set_emotion(dominance=value)
-		elif command == "set_relation_friendliness" and len(args) == 1:
-			value = args[0]
-			if not isinstance(value, (int, float)):
-				continue
-			ai.relation_system.set_relation(friendliness=value)
-		elif command == "set_relation_dominance" and len(args) == 1:
-			value = args[0]
-			if not isinstance(value, (int, float)):
-				continue
-			ai.relation_system.set_relation(dominance=value)	
-		elif command == "reset_mood":
-			ai.emotion_system.reset_mood()	
-		elif command == "consolidate_memories":
-			ai.memory_system.consolidate_memories()
-		elif command == "memories":
-			print("Current memories:")
-			for memory in ai.memory_system.get_short_term_memories():
-				print(memory.format_memory())
-		elif command == "suggest":
-			history = ai.get_message_history(False)
+	while True:
+		ai.tick()
+		ai.emotion_system.print_mood()
+		msg = input("User: ").strip()
+		if not msg:
+			continue
 			
-			if history:
-				print("Suggesting possible user responses...")
-				possible_responses = suggest_responses(history)
-				print("Possible responses:")
-				for response in possible_responses:
-					print("- " + response)
-			else:
-				print("You need to have sent at least one message before you can use this command")	
-		elif command == "wipe" or command == "reset":
-			if os.path.exists(SAVE_PATH):
-				choice = input("Really erase saved data and memories for this AI? Type 'yes' to erase data, or anything else to cancel: ")
-				if choice.strip().lower() == "yes":
-					os.remove(SAVE_PATH)
-					input("The AI has been reset. Press enter to continue.")
-					clear_screen()
-					ai = AISystem()
-					ai.on_startup()
-		continue
-	print()
+		if msg.startswith("/"):
+			command, args = command_parse(msg[1:])
+			if command == "set_pleasure" and len(args) == 1:
+				value = args[0]
+				if not isinstance(value, (int, float)):
+					continue
+				ai.emotion_system.set_emotion(pleasure=value)
+			if command == "set_arousal" and len(args) == 1:
+				value = args[0]
+				if not isinstance(value, (int, float)):
+					continue
+				ai.emotion_system.set_emotion(arousal=value)
+			elif command == "set_dominance" and len(args) == 1:
+				value = args[0]
+				if not isinstance(value, (int, float)):
+					continue
+				ai.emotion_system.set_emotion(dominance=value)
+			elif command == "set_relation_friendliness" and len(args) == 1:
+				value = args[0]
+				if not isinstance(value, (int, float)):
+					continue
+				ai.relation_system.set_relation(friendliness=value)
+			elif command == "set_relation_dominance" and len(args) == 1:
+				value = args[0]
+				if not isinstance(value, (int, float)):
+					continue
+				ai.relation_system.set_relation(dominance=value)
+			elif command == "show_thoughts":
+				ai.set_thought_visibility(True)
+			elif command == "hide_thoughts":
+				ai.set_thought_visibility(False)		
+			elif command == "reset_mood":
+				ai.emotion_system.reset_mood()	
+			elif command == "consolidate_memories":
+				ai.memory_system.consolidate_memories()
+			elif command == "memories":
+				print("Current memories:")
+				for memory in ai.memory_system.get_short_term_memories():
+					print(memory.format_memory())
+			elif command == "suggest":
+				history = ai.get_message_history(False)	
+				if history:
+					print("Suggesting possible user responses...")
+					possible_responses = suggest_responses(history)
+					print("Possible responses:")
+					for response in possible_responses:
+						print("- " + response)
+				else:
+					print("You need to have sent at least one message before you can use this command")	
+			elif command in ["wipe", "reset"]:
+				if os.path.exists(SAVE_PATH):
+					choice = input("Really erase saved data and memories for this AI? Type 'yes' to erase data, or anything else to cancel: ")
+					if choice.strip().lower() == "yes":
+						os.remove(SAVE_PATH)
+						input("The AI has been reset. Press enter to continue.")
+						clear_screen()
+						ai = AISystem()
+						ai.on_startup()
+			
+			continue
 	
-	try:
-		message = ai.send_message(msg)
-	except Exception as e:
-		traceback.print_exception(type(e), e, e.__traceback__)
-		print("Oops! There was an error processing your input. Please try again in a moment.")
-	else:
-		print("AI: " + message)
-		ai.save(SAVE_PATH)
-	
+		print()
+		
+		try:
+			message = ai.send_message(msg)
+		except Exception as e:  # pylint: disable=broad-except
+			traceback.print_exception(type(e), e, e.__traceback__)
+			print("Oops! There was an error processing your input. Please try again in a moment.")
+		else:
+			print(f"{ai.name}: " + message)
+			ai.save(SAVE_PATH)
+		
+
+if __name__ == "__main__":
+	main()

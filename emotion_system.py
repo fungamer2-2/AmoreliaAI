@@ -396,6 +396,10 @@ class EmotionSystem:
 			if emotion_center.distance(self.mood) < 0.005:
 				self.mood = emotion_center.copy()
 			
+			if emotion_center.is_same_octant(self.mood) and emotion_center.get_intensity() < self.mood.get_intensity():
+				delta = emotion_center  # Push phase
+			else:
+				delta = emotion_center - self.mood  # Pull phase
 			self.mood += t * v * emotion_center
 			self.mood.clamp()
 			return True

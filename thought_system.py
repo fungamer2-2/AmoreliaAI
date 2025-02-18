@@ -1,8 +1,9 @@
 from datetime import datetime
 
 from llm import MistralLLM
-from emotion_system import Emotion
 from const import *
+from utils import conversation_to_string
+
 import json
 
 
@@ -54,7 +55,7 @@ class ThoughtSystem:
 		for question in questions:
 			print(f"Reflecting on '{question}'")
 			relevant_memories = (
-				self.memory_system.short_term.retrieve(question, k=12)
+				self.memory_system.get_memories()
 				+ self.memory_system.long_term.retrieve(question, k=12)
 			)
 			memories_str = "\n".join(mem.format_memory() for mem in relevant_memories)
@@ -99,19 +100,11 @@ class ThoughtSystem:
 		
 		return data		
 		
-	def think(self, messages, memories):
+	def think(self, messages, memories):		
+		#print(f"Importance counter: {self.memory_system.importance_counter}")
 		
-		print(f"Importance counter: {self.memory_system.importance_counter}")
-		role_map = {
-			"user": "User",
-			"assistant": self.config.name
-		}
-		history_str = "\n\n".join(
-			f"{role_map[msg['role']]}: {msg['content']}"
-			for msg in messages[:-1]
-		)
+		history_str = conversation_to_string(messages, self.config.name)
 		mood_prompt = self.emotion_system.get_mood_prompt()
-		mood = self.emotion_system.mood
 		
 		memories_str = (
 			"\n".join(mem.format_memory() for mem in memories)
@@ -129,7 +122,7 @@ class ThoughtSystem:
 			curr_time=datetime.now().strftime("%-I:%M %p"),
 			mood_prompt=mood_prompt,
 			memories=memories_str,
-			relationship_str = self.relation_system.get_string()
+			relationship_str=self.relation_system.get_string()
 		)
 		 
 		thought_history = [
@@ -148,9 +141,7 @@ class ThoughtSystem:
 		else:
 			data = {}
 			
-			
 		data = self._check_and_fix_thought_output(data)
-		#print(data)
 		thought_history.append({
 			"role": "assistant",
 			"content": json.dumps(data, indent=4)
@@ -161,12 +152,9 @@ class ThoughtSystem:
 			for thought in data["thoughts"]:
 				print(f"- {thought}")
 			print()
-			
-		continue_thinking = data["next_action"].lower() == "continue"
-		max_steps = 5
 		
 		num_steps = 0
-		while continue_thinking:
+		while data["next_action"].lower() == "continue":
 			num_steps += 1
 			thought_history.append({
 				"role": "user",
@@ -174,18 +162,16 @@ class ThoughtSystem:
 			})
 			new_data = self.model.generate(
 				thought_history,
-				temperature=0.7,
-				presence_penalty=0.4,
-				return_json=True
+				temperature=0.8,
+				return_json=True,
+				schema=THOUGHT_SCHEMA
 			)
-			new_data = self._check_and_fix_thought_output(new_data)
-			#print(new_data)
+			new_data = self._check_and_fix_thought_output(new_data)	
 			thought_history.append({
 				"role": "assistant",
 				"content": json.dumps(new_data, indent=4)
 			})
-			if self.show_thoughts:
-				print("Higher-order thoughts:")
+			if self.show_thoughts:			
 				for thought in new_data["thoughts"]:
 					print(f"- {thought}")
 				print()
@@ -193,14 +179,12 @@ class ThoughtSystem:
 			all_thoughts = data["thoughts"] + new_data["thoughts"]
 			data = new_data.copy()
 			data["thoughts"] = all_thoughts
-			continue_thinking = data["next_action"].lower() == "continue" and num_steps < max_steps
+			if num_steps >= MAX_THOUGHT_STEPS:
+				break
 			
 		intensity = data["emotion_intensity"]
 		emotion = data["emotion"]
 		
-		self.emotion_system.experience_emotion(
-			data["emotion"],
-			intensity/10
-		)
+		self.emotion_system.experience_emotion(emotion, intensity/10)
 		
 		return data
