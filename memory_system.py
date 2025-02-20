@@ -3,7 +3,6 @@ import numpy as np
 import random
 import math
 
-from heapq import nlargest
 from collections import deque
 from datetime import datetime
 from rank_bm25 import BM25Okapi
@@ -12,7 +11,8 @@ from const import *
 from llm import MistralLLM, mistral_embed_texts
 from utils import (
 	normalize_text,
-	get_approx_time_ago_str
+	get_approx_time_ago_str,
+	conversation_to_string
 )
 
 
@@ -350,18 +350,15 @@ class MemorySystem:
 	def retrieve_long_term(self, query, top_k):
 		return self.long_term.retrieve(query, top_k, remove=False)
 	
-	def retrieve_short_term(self, query, top_k):
-		return self.short_term.retrieve(query, top_k)
-	
 	def recall_memories(self, messages):
-		role_map = {
-			"user": "User",
-			"assistant": self.config.name
-		}
 		messages = [msg for msg in messages if msg["role"] != "system"]
-		context = "\n".join(
-			f"{role_map[msg['role']]}: {msg['content']}"
-			for msg in messages[-3:]  # Use the last few messages as context		
-		)
+		context = conversation_to_string(messages[-3:])
 		self.recall(context)
 		return self.get_short_term_memories()
+
+
+if __name__ == "__main__":
+	from main import AIConfig
+	config = AIConfig()
+	url = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQm0QQb_Xbj_TXUU-om29Do38gu7e4LUuX--jExfo2gxQ&s=10"
+	

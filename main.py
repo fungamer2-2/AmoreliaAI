@@ -11,9 +11,8 @@ from colored import Fore, Style
 from pydantic import BaseModel, Field
 
 from llm import MistralLLM
-from utils import clear_screen
+from utils import clear_screen, get_model_to_use
 from emotion_system import (
-	Emotion,
 	EmotionSystem,
 	PersonalitySystem,
 	RelationshipSystem
@@ -114,7 +113,6 @@ class AIConfig(BaseModel):
 	system_prompt: str = Field(
 		default=AI_SYSTEM_PROMPT
 	)
-	model: str = "mistral-large-latest"
 	personality: PersonalityConfig = Field(
 		default_factory=lambda: PersonalityConfig(
 			open=0.45,
@@ -124,6 +122,7 @@ class AIConfig(BaseModel):
 			neurotic=-0.15
 		)
 	)
+	
 
 
 class AISystem:
@@ -134,8 +133,6 @@ class AISystem:
 		personality = config.personality
 		
 		self.config = config
-		self.model = MistralLLM(config.model)
-		self.name = config.name
 		self.personality_system = PersonalitySystem(
 			open=personality.open,
 			conscientious=personality.conscientious,
@@ -175,12 +172,58 @@ class AISystem:
 		self.last_tick = datetime.now()
 		self.tick()
 		
-	def send_message(self, user_input: str, return_json=False):
+	def _image_to_description(self, image_url):
+		messages = [
+			{"role":"system", "content":self.config.system_prompt},
+			{
+				"role":"user",
+				"content": [
+					{
+						"type":"image_url",
+						"image_url": image_url
+					},
+					{
+						"type": "text",
+						"text": "Please describe in detail what you see in this image."
+					}
+				]
+			}
+		]
+		model = MistralLLM("pixtral-large-latest")
+		return model.generate(
+			messages,
+			temperature=0.1,
+			max_tokens=1024
+		)
+		
+	def _input_to_memory(self, user_input, ai_response, attached_image=None):
+		user_msg = ""
+		if attached_image:
+			description = self._image_to_description(attached_image)
+			user_msg += f'<attached_img url="{attached_image}">Description: {description}</attached_img>\n'
+		
+		user_msg += user_input
+		
+		return f"User: {user_msg}\n\nAI: {ai_response}"
+		
+	def send_message(self, user_input: str, attached_image=None, return_json=False):
 		self.tick()
 		self.last_message = datetime.now()
 		self.buffer.set_system_prompt(self.config.system_prompt)
-
-		self.buffer.add_message("user", user_input)
+	
+		content = user_input
+		if attached_image is not None:
+			content = [
+				{
+					"type": "image_url",
+					"image_url": attached_image
+				},
+				{
+					"type": "text",
+					"text": user_input
+				}
+			]
+		self.buffer.add_message("user", content)
 		
 		history = self.get_message_history()
 		
@@ -192,6 +235,7 @@ class AISystem:
 			if memories 
 			else "You don't have any memories of this user yet!"
 		)
+		
 		thought_data = self.thought_system.think(
 			self.get_message_history(False),
 			memories
@@ -202,9 +246,21 @@ class AISystem:
 		else:
 			user_emotion_str = "The user doesn't appear to show any strong emotion."
 		
-		history[-1]["content"] = USER_TEMPLATE.format(
+		content = history[-1]["content"]
+		
+		img_data = None
+		if isinstance(content, list):
+			assert len(content) == 2
+			assert content[0]["type"] == "image_url"
+			assert content[1]["type"] == "text"
+			text_content = content[1]["text"] + "\n\n((The user attached an image to this message))"
+			img_data = content[0]
+		else:
+			text_content = content
+		
+		prompt = USER_TEMPLATE.format(
 			name=self.config.name,
-			user_input=history[-1]["content"],
+			user_input=text_content,
 			personality_summary=self.personality_system.get_summary(),
 			ai_thoughts="\n".join("- " + thought for thought in thought_data["thoughts"]),
 			emotion=thought_data["emotion"],
@@ -215,14 +271,25 @@ class AISystem:
 			memories=memories_str,
 			user_emotion_str=user_emotion_str
 		)
-		response = self.model.generate(
+		prompt_content = prompt
+		if img_data:
+			prompt_content = [
+				img_data,
+				{"type":"text", "text":prompt_content}
+			]
+		
+		history[-1]["content"] = prompt_content
+	
+		model = get_model_to_use(history)
+		
+		response = model.generate(
 			history,
 			temperature=0.8,
 			return_json=return_json
 		)
-		
-		self.memory_system.remember(f"User: {user_input}\n\n{self.name}: {response}")
-		
+	
+		self.memory_system.remember(self._input_to_memory(user_input, response, attached_image))
+			
 		self.tick()
 		new_response = response
 		if return_json:
@@ -323,12 +390,15 @@ def command_parse(string):
 
 
 def main():
+	attached_image = None
 	ai = AISystem.load_or_create(SAVE_PATH)
 	print(f"{Fore.yellow}Note: It's recommended not to enter any sensitive information.{Style.reset}")
 	
-	while True:
+	while True:		
 		ai.tick()
 		ai.emotion_system.print_mood()
+		if attached_image:
+			print(f"Attached image: {attached_image}")
 		msg = input("User: ").strip()
 		if not msg:
 			continue
@@ -368,6 +438,19 @@ def main():
 				ai.emotion_system.reset_mood()	
 			elif command == "consolidate_memories":
 				ai.memory_system.consolidate_memories()
+			elif command == "attach_image" and len(args) == 1:
+				url = args[0]
+				if not isinstance(url, str):
+					continue
+				import requests
+				try:		
+					requests.get(url, timeout=10)
+				except:
+					print("Failed to fetch image")
+				else:
+					attached_image = url
+			elif command == "detach_image":
+				attached_image = None
 			elif command == "memories":
 				print("Current memories:")
 				for memory in ai.memory_system.get_short_term_memories():
@@ -397,14 +480,15 @@ def main():
 		print()
 		
 		try:
-			message = ai.send_message(msg)
+			message = ai.send_message(msg, attached_image=attached_image)
 		except Exception as e:  # pylint: disable=broad-except
 			traceback.print_exception(type(e), e, e.__traceback__)
 			print("Oops! There was an error processing your input. Please try again in a moment.")
 		else:
-			print(f"{ai.name}: " + message)
+			print(f"{ai.config.name}: " + message)
 			ai.save(SAVE_PATH)
+			attached_image = None
 		
 
-if __name__ == "__main__":
+if __name__ == "__main__":	
 	main()

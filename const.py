@@ -7,6 +7,7 @@ PERSONALITY_INTENSITY_FACTOR = 0.3
 LSH_VEC_DIM = 1024
 LSH_NUM_BITS = 2
 MEMORY_DECAY_TIME_MULT = 1.75
+MAX_THOUGHT_STEPS = 5
 SAVE_PATH = "ai_system_save.pkl"
 
 EMOTION_MAP = {
@@ -165,12 +166,6 @@ Here are the memories on your mind right now:
 
 {memories}
 
-# Current Conversation History
-
-Here are the previous messages in the current conversation:
-
-{history_str}
-
 # Current Mood
 
 Your mood is represented in the PAD (Pleasure-Arousal-Dominance) space below, each value ranging from -1 to +1: 
@@ -198,7 +193,7 @@ Current time: {curr_time}
 
 # Instructions
 
-Generate a list of 5 thoughts, and the emotion. The thoughts should be in first-person, from your perspective as {name}.
+Given the previous chat history and last user input, generate a list of 5 thoughts, and the emotion. The thoughts should be in first-person, from your perspective as {name}.
 
 Respond with a JSON object in this format:
 {{

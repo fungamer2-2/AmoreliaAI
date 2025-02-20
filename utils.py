@@ -1,5 +1,6 @@
 import re, os
 from colored import Style
+from llm import MistralLLM
 
 
 def clear_screen():
@@ -105,8 +106,38 @@ def conversation_to_string(messages, ai_name="AI"):
 		"user": "User",
 		"assistant": ai_name
 	}
-	return "\n\n".join(
-		f"{role_map[msg['role']]}: {msg['content']}"
-		for msg in messages[:-1]
-	)
 	
+	string = []
+	for msg in messages:
+		content = msg["content"]
+		if isinstance(content, str):
+			content_str = content
+		else:
+			content_str = []
+			for chunk in content:
+				if chunk["type"] == "text":
+					content_str.append(chunk["text"])
+				elif chunk["type"] == "image_url":
+					url = chunk["image_url"]
+					content_str.append(f'<img url="{url}">')
+			content_str = "\n".join(content_str)
+		
+		s = f"{role_map[msg['role']]}: {content_str}"
+		
+		string.append(s)
+		
+	return "\n\n".join(string)
+
+
+def get_model_to_use(messages):
+	for msg in messages:
+		if msg["role"] != "user":
+			continue
+		content = msg["content"]
+		if isinstance(content, list) and any(chunk["type"] == "image_url" for chunk in content):
+			model_name = "pixtral-large-latest"
+			break		
+	else:
+		model_name = "mistral-large-latest"
+
+	return MistralLLM(model_name)

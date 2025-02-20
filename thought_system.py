@@ -2,7 +2,7 @@ from datetime import datetime
 
 from llm import MistralLLM
 from const import *
-from utils import conversation_to_string
+from utils import get_model_to_use
 
 import json
 
@@ -17,7 +17,7 @@ class ThoughtSystem:
 		relation_system,
 		personality_system
 	):
-		self.model = MistralLLM(config.model)
+		self.model = MistralLLM()
 		self.config = config
 		self.emotion_system = emotion_system
 		self.memory_system = memory_system
@@ -101,46 +101,58 @@ class ThoughtSystem:
 		return data		
 		
 	def think(self, messages, memories):		
-		#print(f"Importance counter: {self.memory_system.importance_counter}")
-		
-		history_str = conversation_to_string(messages, self.config.name)
-		mood_prompt = self.emotion_system.get_mood_prompt()
-		
 		memories_str = (
 			"\n".join(mem.format_memory() for mem in memories)
 			if memories 
 			else "You don't have any memories of this user yet!"
 		)
 		
+		content = messages[-1]["content"]
+		
+		img_data = None
+		if isinstance(content, list):
+			assert len(content) == 2
+			assert content[0]["type"] == "image_url"
+			assert content[1]["type"] == "text"
+			text_content = content[1]["text"] + "\n\n((The user attached an image to this message))"
+			img_data = content[0]
+		else:
+			text_content = content
+		
 		prompt = THOUGHT_PROMPT.format(
-			history_str=history_str,
 			name=self.config.name,
-			user_input=messages[-1]["content"],
+			user_input=text_content,
 			personality_summary=self.personality_system.get_summary(),
 			mood_long_desc=self.emotion_system.get_mood_long_description(),
 			curr_date=datetime.now().strftime("%a, %-m/%-d/%Y"),
 			curr_time=datetime.now().strftime("%-I:%M %p"),
-			mood_prompt=mood_prompt,
+			mood_prompt=self.emotion_system.get_mood_prompt(),
 			memories=memories_str,
 			relationship_str=self.relation_system.get_string()
 		)
-		 
+		prompt_content = prompt
+		if img_data:
+			prompt_content = [
+				{"type":"text", "text":prompt_content},
+				img_data
+			]
+		
 		thought_history = [
 			{"role":"system", "content":self.config.system_prompt},
-			{"role":"user", "content":prompt}
+			{"role":"user", "content":"[START OF PREVIOUS CHAT HISTORY]"},
+			*messages[:-1],
+			{"role":"user", "content":"[END OF PREVIOUS CHAT HISTORY]"},	
+			{"role":"user", "content":prompt_content}
 		]
-		for _ in range(3):
-			data = self.model.generate(
-				thought_history,
-				temperature=0.8,
-				return_json=True,
-				schema=THOUGHT_SCHEMA
-			)
-			if "thoughts" in data:
-				break
-		else:
-			data = {}
+		model = get_model_to_use(messages)
 			
+		data = model.generate(
+			thought_history,
+			temperature=0.8,
+			return_json=True,
+			schema=THOUGHT_SCHEMA
+		)
+		
 		data = self._check_and_fix_thought_output(data)
 		thought_history.append({
 			"role": "assistant",
@@ -160,7 +172,7 @@ class ThoughtSystem:
 				"role": "user",
 				"content": HIGHER_ORDER_THOUGHTS
 			})
-			new_data = self.model.generate(
+			new_data = model.generate(
 				thought_history,
 				temperature=0.8,
 				return_json=True,
@@ -181,10 +193,10 @@ class ThoughtSystem:
 			data["thoughts"] = all_thoughts
 			if num_steps >= MAX_THOUGHT_STEPS:
 				break
-			
-		intensity = data["emotion_intensity"]
-		emotion = data["emotion"]
 		
-		self.emotion_system.experience_emotion(emotion, intensity/10)
+		self.emotion_system.experience_emotion(
+			data["emotion"],
+			data["emotion_intensity"]/10
+		)
 		
 		return data

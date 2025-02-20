@@ -313,29 +313,17 @@ class EmotionSystem:
 		mood = self.mood
 		if mood.get_intensity() < 0.05:
 			return "neutral"
-			
+		
 		if mood.pleasure >= 0:
 			if mood.arousal >= 0:
-				if mood.dominance >= 0:
-					return "exuberant"
-				else:
-					return "dependent"
+				return "exuberant" if mood.dominance >= 0 else "dependent"
 			else:
-				if mood.dominance >= 0:
-					return "relaxed"
-				else:
-					return "docile"
+				return "relaxed" if mood.dominance >= 0 else "docile"
 		else:
 			if mood.arousal >= 0:
-				if mood.dominance >= 0:
-					return "hostile"
-				else:
-					return "anxious"
+				return "hostile" if mood.dominance >= 0 else "anxious"
 			else:
-				if mood.dominance >= 0:
-					return "disdainful"
-				else:
-					return "bored"
+				return "disdainful" if mood.dominance >= 0 else "bored"
 
 	def get_mood_description(self):
 		mood_name = self.get_mood_name()
@@ -360,14 +348,10 @@ class EmotionSystem:
 		mood_align = emotion.dot(self.mood)
 		personality_align = emotion.dot(self.get_base_mood())
 		
-		orig = intensity
 		intensity_mod = MODD_INTENSITY_FACTOR * mood_align + PERSONALITY_INTENSITY_FACTOR * personality_align 
 		intensity += intensity_mod
 		intensity = max(0.05, min(intensity, 1.0))
 		self.relation.on_emotion(name, intensity)
-		#print(f"Intensity before: {orig}")
-#		print(f"Intensity after:  {intensity}")
-		#print(f"Intensity multiplier: x{intensity_mult}")
 		self.emotions.append(emotion * intensity)
 
 	def _tick_emotion_change(self, t):
@@ -385,7 +369,6 @@ class EmotionSystem:
 		
 		self.emotions = new_emotions
 		if self.emotions:
-			eff_emotions = []
 			emotion_center /= len(self.emotions)
 			
 			max_intensity = max(em.get_intensity() for em in self.emotions)
@@ -400,7 +383,7 @@ class EmotionSystem:
 				delta = emotion_center  # Push phase
 			else:
 				delta = emotion_center - self.mood  # Pull phase
-			self.mood += t * v * emotion_center
+			self.mood += t * v * delta
 			self.mood.clamp()
 			return True
 		return False
