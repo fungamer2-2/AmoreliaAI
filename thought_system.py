@@ -1,8 +1,13 @@
+#pylint:disable=C0115
+#pylint:disable=C0114
 from datetime import datetime
 
 from llm import MistralLLM
 from const import *
-from utils import get_model_to_use
+from utils import (
+	get_model_to_use,
+	format_memories_to_string
+)
 
 import json
 
@@ -31,7 +36,7 @@ class ThoughtSystem:
 		return (
 			self.memory_system.importance_counter >= 9
 			and (datetime.now() - self.last_reflection).total_seconds() > 3 * 3600
-			and len(self.memory_system.get_short_term_memories()) >= 10
+			and len(self.memory_system.get_short_term_memories()) >= 5
 		)
 			
 	def reflect(self):	
@@ -101,11 +106,7 @@ class ThoughtSystem:
 		return data		
 		
 	def think(self, messages, memories):		
-		memories_str = (
-			"\n".join(mem.format_memory() for mem in memories)
-			if memories 
-			else "You don't have any memories of this user yet!"
-		)
+		memories_str = format_memories_to_string(memories, "You don't have any memories of this user yet!")
 		
 		content = messages[-1]["content"]
 		
@@ -164,13 +165,23 @@ class ThoughtSystem:
 			for thought in data["thoughts"]:
 				print(f"- {thought}")
 			print()
+			
+		thoughts_query = " ".join(data["thoughts"])
 		
 		num_steps = 0
 		while data["next_action"].lower() == "continue":
 			num_steps += 1
+			added_context = ""
+			relevant_memories = self.memory_system.long_term.retrieve(thoughts_query, MEMORY_RETRIEVAL_TOP_K)
+			
+			if relevant_memories:
+				added_context = ADDED_CONTEXT_TEMPLATE.format(
+					"\n".join(mem.format_memory() for mem in memories)
+				)
+			
 			thought_history.append({
 				"role": "user",
-				"content": HIGHER_ORDER_THOUGHTS
+				"content": HIGHER_ORDER_THOUGHTS.format(added_context=added_context)
 			})
 			new_data = model.generate(
 				thought_history,
@@ -183,6 +194,8 @@ class ThoughtSystem:
 				"role": "assistant",
 				"content": json.dumps(new_data, indent=4)
 			})
+			thoughts_query = " ".join(new_data["thoughts"])
+		
 			if self.show_thoughts:			
 				for thought in new_data["thoughts"]:
 					print(f"- {thought}")

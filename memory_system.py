@@ -44,6 +44,18 @@ def get_importance(memory):
 		score = 3
 	
 	return max(1, min(score, 10))
+	
+	
+def cosine_similarity(x, y):
+	x = np.array(x)
+	y = np.array(y)
+	assert x.ndim == 1 and y.ndim == 1
+	x = x[np.newaxis, ...]
+	y = y[np.newaxis, ...]
+	sim = x @ y.T
+	sim /= np.linalg.norm(x) * np.linalg.norm(y, axis=1)
+	return np.squeeze(sim)
+
 
 
 class Memory:
@@ -108,6 +120,41 @@ class LSHMemory:
 			hash_ind |= bit
 		return hash_ind
 		
+	def _cluster_memories(self, bucket):
+		threshold = 0.9
+		representatives = []
+		for memory in bucket:
+			embed = memory.embedding
+			if not representatives:
+				representatives.append(embed)
+			else:
+				similarity = -1.0
+				for repr_embed in representatives:
+					repr_sim = cosine_similarity(embed, repr_embed)
+					if repr_sim > similarity: 
+						similarity = repr_sim
+				if similarity < threshold:
+					representatives.append(embed)
+		
+		clusters = [[] for _ in range(len(representatives))]
+		for memory in bucket:
+			similarity = -1.0
+			idx = 0
+			for i, repr_embed in enumerate(representatives):
+				repr_sim = cosine_similarity(embed, repr_embed)
+				if repr_sim > similarity:
+					similarity = repr_sim
+					idx = i
+			clusters[idx].append(memory)
+		return clusters
+		
+	def _prune_similar_memories(self, bucket):
+		# Prunes similar/less important memories
+		# TODO: Finish this
+		clusters = self._cluster_memories(bucket)
+		# Memories are more likely to be pruned based on:
+		# Higher similarity to other memories
+							
 	def add_memory(self, memory):
 		self.count += 1
 		vec = memory.embedding
@@ -162,7 +209,7 @@ class LSHMemory:
 		return memories
 	
 	def recall_random(self, remove=False):
-		# Recall a random subset of memories
+		# Recall a random subset of memories, weighted by memory strength
 		recalled = []
 		weights = []
 		for hash_ind in self.table:
@@ -171,7 +218,7 @@ class LSHMemory:
 			sample_size = min(5, len(self.table[hash_ind]))
 			sample = random.sample(self.table[hash_ind], sample_size)
 			recalled.extend(sample)
-			weights.extend([mem.strength for mem in sample])
+			weights.extend([mem.get_recency_factor() for mem in sample])
 		
 		if len(recalled) > 5:
 			new_recalled = []
@@ -311,7 +358,7 @@ class MemorySystem:
 	
 	def recall(self, query):
 		self.short_term.rehearse(query)
-		memories = self.long_term.retrieve(query, 3, remove=True)
+		memories = self.long_term.retrieve(query, MEMORY_RETRIEVAL_TOP_K, remove=True)
 		for mem in memories:
 			mem.reinforce()
 			self.short_term.add_memory(mem)
@@ -357,8 +404,3 @@ class MemorySystem:
 		return self.get_short_term_memories()
 
 
-if __name__ == "__main__":
-	from main import AIConfig
-	config = AIConfig()
-	url = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQm0QQb_Xbj_TXUU-om29Do38gu7e4LUuX--jExfo2gxQ&s=10"
-	

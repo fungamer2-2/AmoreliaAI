@@ -1,17 +1,21 @@
-import time
-import re
+#pylint:disable=C0103
+#pylint:disable=C0114
+#pylint:disable=C0116
 import os
 import traceback
 import json
-
+import pickle
 from collections import deque
 from datetime import datetime
 
-from colored import Fore, Style	
+from colored import Fore, Style
 from pydantic import BaseModel, Field
-
 from llm import MistralLLM
-from utils import clear_screen, get_model_to_use
+from utils import (
+	clear_screen,
+	get_model_to_use,
+	is_image_url
+)
 from emotion_system import (
 	EmotionSystem,
 	PersonalitySystem,
@@ -23,6 +27,9 @@ from const import *
 
 
 class MessageBuffer:
+	"""
+	A buffer that stores the most recent messages in the conversation, 
+	flushing out older messages if they exceed the limit."""
 	
 	def __init__(self, max_messages):
 		self.max_messages = max_messages
@@ -101,6 +108,7 @@ def suggest_responses(conversation):
 
 
 class PersonalityConfig(BaseModel):
+	"""The config for the personality of the AI"""
 	open: float = Field(ge=-1.0, le=1.0)
 	conscientious: float = Field(ge=-1.0, le=1.0)
 	agreeable: float = Field(ge=-1.0, le=1.0)
@@ -109,6 +117,7 @@ class PersonalityConfig(BaseModel):
 	
 
 class AIConfig(BaseModel):
+	"""The config for the AI"""
 	name: str = Field(default="AI")
 	system_prompt: str = Field(
 		default=AI_SYSTEM_PROMPT
@@ -126,6 +135,7 @@ class AIConfig(BaseModel):
 
 
 class AISystem:
+	"""The AI system, which contains various subsystems influencing the AI"""
 
 	def __init__(self, config=None):
 		config = config or AIConfig()
@@ -155,11 +165,11 @@ class AISystem:
 		)
 		
 		self.last_message = datetime.now()
+		self.last_recall_tick = datetime.now()
 		self.last_tick = datetime.now()
 		
 		self.buffer = MessageBuffer(20)
 		self.buffer.set_system_prompt(config.system_prompt)
-
 		
 	def get_message_history(self, include_system_prompt=True):
 		return self.buffer.to_list(include_system_prompt)
@@ -184,7 +194,8 @@ class AISystem:
 					},
 					{
 						"type": "text",
-						"text": "Please describe in detail what you see in this image."
+						"text": "Please describe in detail what you see in this image. "
+								"Make sure to include specific details, such as style, colors, etc."
 					}
 				]
 			}
@@ -209,6 +220,7 @@ class AISystem:
 	def send_message(self, user_input: str, attached_image=None, return_json=False):
 		self.tick()
 		self.last_message = datetime.now()
+		self.last_recall_tick = datetime.now()
 		self.buffer.set_system_prompt(self.config.system_prompt)
 	
 		content = user_input
@@ -232,17 +244,21 @@ class AISystem:
 		
 		memories_str = (
 			"\n".join(mem.format_memory() for mem in memories)
-			if memories 
+			if memories
 			else "You don't have any memories of this user yet!"
 		)
-		
+			
 		thought_data = self.thought_system.think(
 			self.get_message_history(False),
 			memories
 		)
 		user_emotions = thought_data["possible_user_emotions"]
+		user_emotion_list_str =  ", ".join(user_emotions)
 		if user_emotions:
-			user_emotion_str = "The user appears to be feeling the following emotions: " + ", ".join(user_emotions) + "."
+			user_emotion_str = (
+				"The user appears to be feeling the following emotions: "
+				+ user_emotion_list_str
+			)
 		else:
 			user_emotion_str = "The user doesn't appear to show any strong emotion."
 		
@@ -294,7 +310,7 @@ class AISystem:
 		new_response = response
 		if return_json:
 			new_response = json.dumps(response, indent=2)
-		self.buffer.add_message("assistant", new_response)		
+		self.buffer.add_message("assistant", new_response)
 		return response
 		
 	def set_thought_visibility(self, shown: bool):
@@ -302,24 +318,24 @@ class AISystem:
 
 	def tick(self):
 		now = datetime.now()
-		dt = (now - self.last_tick).total_seconds()
+		delta = (now - self.last_tick).total_seconds()
 		self.emotion_system.tick()
 		if self.thought_system.can_reflect():
 			self.thought_system.reflect()
-		self.memory_system.tick(dt)
-		if dt > 2 * 3600:
+		self.memory_system.tick(delta)
+		
+		if (now - self.last_recall_tick).total_seconds() > 2 * 3600:
 			self.memory_system.surface_random_thoughts()
 			print("Random thoughts surfaced")
+			self.last_recall_tick = now
 		self.last_tick = now
 		
 	def save(self, path):
-		import pickle
 		with open(path, "wb") as file:
 			pickle.dump(self, file)
 	
-	@staticmethod		
+	@staticmethod
 	def load(path):
-		import pickle
 		if os.path.exists(path):
 			with open(path, "rb") as file:
 				return pickle.load(file)
@@ -328,14 +344,15 @@ class AISystem:
 			
 	@classmethod
 	def load_or_create(cls, path):
-		ai = cls.load(path)
-		if ai is None:
-			ai = AISystem()
+		ai_system = cls.load(path)
+		if ai_system is None:
+			ai_system = AISystem()
 			print("AI system initialized.")
 		else:
 			print("AI loaded.")
-		ai.on_startup()
-		return ai
+	
+		ai_system.on_startup()
+		return ai_system
 
 
 def _try_convert_arg(arg):
@@ -349,7 +366,7 @@ def _try_convert_arg(arg):
 	except ValueError:
 		pass
 		
-	return arg	
+	return arg
 
 
 def _parse_args(arg_list_str):
@@ -368,7 +385,7 @@ def _parse_args(arg_list_str):
 		elif in_str:
 			last_tok += char
 		elif char == " ":
-			if last_tok:		
+			if last_tok:	
 				tokens.append(_try_convert_arg(last_tok))
 				last_tok = ""
 		else:
@@ -394,7 +411,7 @@ def main():
 	ai = AISystem.load_or_create(SAVE_PATH)
 	print(f"{Fore.yellow}Note: It's recommended not to enter any sensitive information.{Style.reset}")
 	
-	while True:		
+	while True:
 		ai.tick()
 		ai.emotion_system.print_mood()
 		if attached_image:
@@ -433,22 +450,19 @@ def main():
 			elif command == "show_thoughts":
 				ai.set_thought_visibility(True)
 			elif command == "hide_thoughts":
-				ai.set_thought_visibility(False)		
+				ai.set_thought_visibility(False)
 			elif command == "reset_mood":
-				ai.emotion_system.reset_mood()	
+				ai.emotion_system.reset_mood()
 			elif command == "consolidate_memories":
 				ai.memory_system.consolidate_memories()
 			elif command == "attach_image" and len(args) == 1:
 				url = args[0]
 				if not isinstance(url, str):
 					continue
-				import requests
-				try:		
-					requests.get(url, timeout=10)
-				except:
-					print("Failed to fetch image")
-				else:
+				if is_image_url(url):
 					attached_image = url
+				else:
+					print("Error: Not a valid image url")
 			elif command == "detach_image":
 				attached_image = None
 			elif command == "memories":
@@ -456,7 +470,7 @@ def main():
 				for memory in ai.memory_system.get_short_term_memories():
 					print(memory.format_memory())
 			elif command == "suggest":
-				history = ai.get_message_history(False)	
+				history = ai.get_message_history(False)
 				if history:
 					print("Suggesting possible user responses...")
 					possible_responses = suggest_responses(history)
@@ -464,10 +478,13 @@ def main():
 					for response in possible_responses:
 						print("- " + response)
 				else:
-					print("You need to have sent at least one message before you can use this command")	
+					print("You need to have sent at least one message before you can use this command")
 			elif command in ["wipe", "reset"]:
 				if os.path.exists(SAVE_PATH):
-					choice = input("Really erase saved data and memories for this AI? Type 'yes' to erase data, or anything else to cancel: ")
+					choice = input(
+						"Really erase saved data and memories for this AI? "
+						"Type 'yes' to erase data, or anything else to cancel: "
+					)
 					if choice.strip().lower() == "yes":
 						os.remove(SAVE_PATH)
 						input("The AI has been reset. Press enter to continue.")
@@ -490,5 +507,5 @@ def main():
 			attached_image = None
 		
 
-if __name__ == "__main__":	
+if __name__ == "__main__":
 	main()

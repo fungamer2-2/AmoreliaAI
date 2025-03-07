@@ -1,4 +1,9 @@
-import re, os
+#pylint:disable=C0114
+import re
+import os
+
+import requests
+
 from colored import Style
 from llm import MistralLLM
 
@@ -141,3 +146,19 @@ def get_model_to_use(messages):
 		model_name = "mistral-large-latest"
 
 	return MistralLLM(model_name)
+	
+	
+def format_memories_to_string(memories, default=""):
+	return "\n".join(mem.format_memory() for mem in memories) if memories else default
+	
+
+def is_image_url(url):
+	try:
+		response = requests.head(url)
+		return response.headers["content-type"] in (
+			"image/png",
+			"image/jpg",
+			"image/jpeg"
+		)
+	except requests.RequestException:
+		return False
