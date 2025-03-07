@@ -4,7 +4,7 @@ from datetime import datetime
 from const import *
 from utils import num_to_str_sign, val_to_symbol_color
 from llm import MistralLLM
-from colored import Fore, Style
+from colored import Fore
 
 
 def get_default_mood(open, conscientious, extrovert, agreeable, neurotic):
@@ -33,7 +33,8 @@ def summarize_personality(open, conscientious, extrovert, agreeable, neurotic):
 
 
 class PersonalitySystem:
-	
+	"""The system that defines the AI's personality"""
+
 	def __init__(self, open, conscientious, extrovert, agreeable, neurotic):
 		self.open = open
 		self.conscientious = conscientious
@@ -42,7 +43,7 @@ class PersonalitySystem:
 		self.neurotic = neurotic
 		
 		self.summary = ""
-		
+	
 	def get_summary(self):
 		if not self.summary:
 			self.summary = summarize_personality(
@@ -53,9 +54,10 @@ class PersonalitySystem:
 				self.neurotic
 			)
 		return self.summary
-		
+	
 
 class Emotion:
+	"""The 3D vector that defines emotions or mood"""
 	
 	def __init__(
 		self,
@@ -68,8 +70,8 @@ class Emotion:
 		self.dominance = dominance
 		
 	@classmethod
-	def from_personality(cls, open, conscientious, extrovert, agreeable, neurotic):
-		return cls(*get_default_mood(open, conscientious, extrovert, agreeable, neurotic))
+	def from_personality(cls, openness, conscientious, extrovert, agreeable, neurotic):
+		return cls(*get_default_mood(openness, conscientious, extrovert, agreeable, neurotic))
 	
 	def __add__(self, other):
 		if isinstance(other, Emotion):
@@ -83,13 +85,13 @@ class Emotion:
 	__radd__ = __add__
 		
 	def __iadd__(self, other):
-		if isinstance(other, Emotion):		
+		if isinstance(other, Emotion):
 			self.pleasure += other.pleasure
 			self.arousal += other.arousal
 			self.dominance += other.dominance
 			return self
 		return NotImplemented
-		
+
 	def __sub__(self, other):
 		if isinstance(other, Emotion):
 			return Emotion(
@@ -98,15 +100,15 @@ class Emotion:
 				self.dominance - other.dominance
 			)
 		return NotImplemented
-		
+
 	def __isub__(self, other):
-		if isinstance(other, Emotion):		
+		if isinstance(other, Emotion):
 			self.pleasure -= other.pleasure
 			self.arousal -= other.arousal
 			self.dominance -= other.dominance
 			return self
-		return NotImplemented	
-		
+		return NotImplemented
+
 	def __mul__(self, other):
 		if isinstance(other, (int, float)):
 			return self.__class__(
@@ -115,9 +117,9 @@ class Emotion:
 				self.dominance * other
 			)
 		return NotImplemented
-		
+
 	__rmul__ = __mul__
-		
+
 	def __imul__(self, other):
 		if isinstance(other, (int, float)):
 			self.pleasure *= other
@@ -125,7 +127,7 @@ class Emotion:
 			self.dominance *= other
 			return self
 		return NotImplemented
-		
+
 	def __truediv__(self, other):
 		if isinstance(other, (int, float)):
 			return self.__class__(
@@ -134,7 +136,7 @@ class Emotion:
 				self.dominance / other
 			)
 		return NotImplemented
-						
+
 	def __itruediv__(self, other):
 		if isinstance(other, (int, float)):
 			self.pleasure /= other
@@ -142,8 +144,9 @@ class Emotion:
 			self.dominance /= other
 			return self
 		return NotImplemented
-		
+
 	def dot(self, other):
+		"""Returns the dot-product alignment with the given emotion"""
 		return (
 			self.pleasure * other.pleasure
 			+ self.arousal * other.arousal
@@ -151,9 +154,11 @@ class Emotion:
 		)
 		
 	def get_intensity(self):
+		
 		return math.sqrt(self.pleasure**2 + self.arousal ** 2 + self.dominance**2)
 	
 	def distance(self, other):
+		"""Returns the distance between two emotions"""
 		dp = self.pleasure - other.pleasure
 		da = self.arousal - other.arousal
 		dd = self.dominance - other.dominance
@@ -164,11 +169,14 @@ class Emotion:
 		return max(abs(self.pleasure), abs(self.arousal), abs(self.dominance))
 		
 	def clamp(self):
+		"""Clips the emotion vector by norm if it is outside the range"""
 		norm = self.get_norm()
 		if norm > 1:
 			self /= norm
 			
 	def copy(self):
+		"""Creates a copy of this emotion vector.
+		Changes to the copy will not affect the original"""
 		return self.__class__(
 			self.pleasure,
 			self.arousal,
@@ -176,6 +184,7 @@ class Emotion:
 		) 
 		
 	def is_same_octant(self, other):
+		"""Checks whether two emotions are in the same octant."""
 		return (
 			(self.pleasure >= 0) == (other.pleasure >= 0)
 			and (self.arousal >= 0) == (other.arousal >= 0)
@@ -249,7 +258,7 @@ class EmotionSystem:
 			personality_system.agreeable,
 			personality_system.neurotic
 		)
-		self.relation = relation_system		
+		self.relation = relation_system
 		self.base_mood = base_mood
 		self.reset_mood()
 		self.last_update = time.time()

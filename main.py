@@ -1,5 +1,5 @@
-#pylint:disable=C0103
-#pylint:disable=C0114
+"""The main module that runs the AI."""
+
 import os
 import traceback
 import json
@@ -29,7 +29,7 @@ class MessageBuffer:
 	"""
 	A buffer that stores the most recent messages in the conversation, 
 	flushing out older messages if they exceed the limit."""
-	
+
 	def __init__(self, max_messages):
 		self.max_messages = max_messages
 		self.messages = deque(maxlen=max_messages)
@@ -42,7 +42,7 @@ class MessageBuffer:
 	def add_message(self, role, content):
 		"""Adds a message to the buffer."""
 		self.messages.append({"role": role, "content": content})
-		
+	
 	def pop(self):
 		"""Removes and returns the last message."""
 		return self.messages.pop()
@@ -50,7 +50,7 @@ class MessageBuffer:
 	def flush(self):
 		"""Clears the buffer, removing all messages."""
 		self.messages.clear()
-		
+	
 	def to_list(self, include_system_prompt=True):
 		"""Converts the buffer to a list of messages.
 		The system prompt is included by default, but you can set include_system_prompt=False
@@ -105,7 +105,7 @@ def suggest_responses(conversation):
 	prompt = GENERATE_USER_RESPONSES_PROMPT.format(
 		conversation_history=history_str
 	)
-	
+
 	data = model.generate(
 		prompt,
 		temperature=0.7,
@@ -121,7 +121,7 @@ class PersonalityConfig(BaseModel):
 	agreeable: float = Field(ge=-1.0, le=1.0)
 	extrovert: float = Field(ge=-1.0, le=1.0)
 	neurotic: float = Field(ge=-1.0, le=1.0)
-	
+
 
 class AIConfig(BaseModel):
 	"""The config for the AI"""
@@ -138,7 +138,6 @@ class AIConfig(BaseModel):
 			neurotic=-0.15
 		)
 	)
-	
 
 
 class AISystem:
@@ -146,9 +145,8 @@ class AISystem:
 
 	def __init__(self, config=None):
 		config = config or AIConfig()
-		
 		personality = config.personality
-		
+	
 		self.config = config
 		self.personality_system = PersonalitySystem(
 			open=personality.open,
@@ -170,26 +168,24 @@ class AISystem:
 			self.relation_system,
 			self.personality_system
 		)
-		
+
 		self.last_message = datetime.now()
 		self.last_recall_tick = datetime.now()
 		self.last_tick = datetime.now()
-		
+
 		self.buffer = MessageBuffer(20)
 		self.buffer.set_system_prompt(config.system_prompt)
-		
+
 	def get_message_history(self, include_system_prompt=True):
+		"""Gets the current conversation history."""
 		return self.buffer.to_list(include_system_prompt)
-		
-	def get_mood(self):
-		return self.emotion_system.mood
-			
+
 	def on_startup(self):
 		"""Runs when the AI system is loaded."""
 		self.buffer.flush()
 		self.last_tick = datetime.now()
 		self.tick()
-		
+
 	def _image_to_description(self, image_url):
 		messages = [
 			{"role":"system", "content":self.config.system_prompt},
@@ -214,23 +210,24 @@ class AISystem:
 			temperature=0.1,
 			max_tokens=1024
 		)
-		
+
 	def _input_to_memory(self, user_input, ai_response, attached_image=None):
 		user_msg = ""
 		if attached_image:
 			description = self._image_to_description(attached_image)
 			user_msg += f'<attached_img url="{attached_image}">Description: {description}</attached_img>\n'
-		
+
 		user_msg += user_input
-		
+
 		return f"User: {user_msg}\n\nAI: {ai_response}"
-		
+
 	def send_message(self, user_input: str, attached_image=None, return_json=False):
+		"""Sends a message to the AI, and returns the response."""
 		self.tick()
 		self.last_message = datetime.now()
 		self.last_recall_tick = datetime.now()
 		self.buffer.set_system_prompt(self.config.system_prompt)
-	
+
 		content = user_input
 		if attached_image is not None:
 			content = [
@@ -244,18 +241,17 @@ class AISystem:
 				}
 			]
 		self.buffer.add_message("user", content)
-		
+
 		history = self.get_message_history()
-		
+
 		memories = self.memory_system.recall_memories(history)
 		memories.sort(key=lambda memory: memory.timestamp)
-		
+
 		memories_str = (
 			"\n".join(mem.format_memory() for mem in memories)
 			if memories
 			else "You don't have any memories of this user yet!"
 		)
-			
 		thought_data = self.thought_system.think(
 			self.get_message_history(False),
 			memories
@@ -269,9 +265,9 @@ class AISystem:
 			)
 		else:
 			user_emotion_str = "The user doesn't appear to show any strong emotion."
-		
+
 		content = history[-1]["content"]
-		
+
 		img_data = None
 		if isinstance(content, list):
 			assert len(content) == 2
@@ -281,7 +277,7 @@ class AISystem:
 			img_data = content[0]
 		else:
 			text_content = content
-		
+
 		prompt = USER_TEMPLATE.format(
 			name=self.config.name,
 			user_input=text_content,
@@ -301,31 +297,47 @@ class AISystem:
 				img_data,
 				{"type":"text", "text":prompt_content}
 			]
-		
+
 		history[-1]["content"] = prompt_content
-	
+
 		model = get_model_to_use(history)
-		
+
 		response = model.generate(
 			history,
 			temperature=0.8,
 			return_json=return_json
 		)
-	
+
 		self.memory_system.remember(self._input_to_memory(user_input, response, attached_image))
-			
 		self.tick()
 		new_response = response
 		if return_json:
 			new_response = json.dumps(response, indent=2)
 		self.buffer.add_message("assistant", new_response)
 		return response
-		
+
 	def set_thought_visibility(self, shown: bool):
 		"""Sets the flag for whether or not to show the AI's internal thoughts."""
 		self.thought_system.show_thoughts = shown
 
+	def get_mood(self):
+		"""Gets the AI's current mood."""
+		return self.emotion_system.mood
+
+	def set_mood(self, pleasure=None, arousal=None, dominance=None):
+		"""Sets the AI's current mood. All parameters are optional, but if none are specified, 
+		resets the AI's mood to its baseline level."""
+		if pleasure is None and arousal is None and dominance is None:
+			self.emotion_system.reset_mood()
+		else:
+			self.emotion_system.set_emotion(
+				pleasure=pleasure,
+				arousal=arousal,
+				dominance=dominance
+			)
+
 	def tick(self):
+		"""Runs a tick to update the AI's systems"""
 		now = datetime.now()
 		delta = (now - self.last_tick).total_seconds()
 		self.emotion_system.tick()
@@ -397,7 +409,7 @@ def _parse_args(arg_list_str):
 		elif in_str:
 			last_tok += char
 		elif char == " ":
-			if last_tok:	
+			if last_tok:
 				tokens.append(_try_convert_arg(last_tok))
 				last_tok = ""
 		else:
@@ -409,6 +421,7 @@ def _parse_args(arg_list_str):
 	
 
 def command_parse(string):
+	"""Parses a command into its arguments"""
 	split = string.split(None, 1)
 	if len(split) == 2:
 		command, remaining = split
@@ -419,6 +432,7 @@ def command_parse(string):
 
 
 def main():
+	"""The main method"""
 	attached_image = None
 	ai = AISystem.load_or_create(SAVE_PATH)
 	print(f"{Fore.yellow}Note: It's recommended not to enter any sensitive information.{Style.reset}")
@@ -438,17 +452,17 @@ def main():
 				value = args[0]
 				if not isinstance(value, (int, float)):
 					continue
-				ai.emotion_system.set_emotion(pleasure=value)
+				ai.set_mood(pleasure=value)
 			if command == "set_arousal" and len(args) == 1:
 				value = args[0]
 				if not isinstance(value, (int, float)):
 					continue
-				ai.emotion_system.set_emotion(arousal=value)
+				ai.set_mood(arousal=value)
 			elif command == "set_dominance" and len(args) == 1:
 				value = args[0]
 				if not isinstance(value, (int, float)):
 					continue
-				ai.emotion_system.set_emotion(dominance=value)
+				ai.set_mood(dominance=value)
 			elif command == "set_relation_friendliness" and len(args) == 1:
 				value = args[0]
 				if not isinstance(value, (int, float)):
@@ -502,17 +516,16 @@ def main():
 						input("The AI has been reset. Press enter to continue.")
 						clear_screen()
 						ai = AISystem()
-						ai.on_startup()
-			
+						ai.on_startup()	
 			continue
 	
 		print()
 		
 		try:
 			message = ai.send_message(msg, attached_image=attached_image)
-		except Exception as e:  # pylint: disable=broad-except
+		except Exception as e:  # pylint: disable=W0718,C0103
 			traceback.print_exception(type(e), e, e.__traceback__)
-			print("Oops! There was an error processing your input. Please try again in a moment.")
+			print("An error occurred. Please try again in a moment.")
 		else:
 			print(f"{ai.config.name}: " + message)
 			ai.save(SAVE_PATH)

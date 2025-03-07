@@ -1,5 +1,6 @@
 #pylint:disable=C0115
 #pylint:disable=C0114
+import json
 from datetime import datetime
 
 from llm import MistralLLM
@@ -8,8 +9,6 @@ from utils import (
 	get_model_to_use,
 	format_memories_to_string
 )
-
-import json
 
 
 class ThoughtSystem:
@@ -33,16 +32,18 @@ class ThoughtSystem:
 		self.last_reflection = datetime.now()
 		
 	def can_reflect(self):
+		"""Determines whether the AI should reflect on its memories and gain insights."""
 		return (
 			self.memory_system.importance_counter >= 9
 			and (datetime.now() - self.last_reflection).total_seconds() > 3 * 3600
 			and len(self.memory_system.get_short_term_memories()) >= 5
 		)
 			
-	def reflect(self):	
+	def reflect(self):
+		"""Performs 'reflection' - the AI can reflect on its memories to gain higher-level insights."""	
 		recent_memories = self.memory_system.get_short_term_memories()
 		memories_str = "\n".join(mem.format_memory() for mem in recent_memories)
-		
+
 		prompt = REFLECT_GEN_TOPICS.format(
 			memories=memories_str
 		)
@@ -56,7 +57,7 @@ class ThoughtSystem:
 			temperature=0.1,
 			return_json=True
 		)["questions"]
-			
+
 		for question in questions:
 			print(f"Reflecting on '{question}'")
 			relevant_memories = (
@@ -103,13 +104,17 @@ class ThoughtSystem:
 		
 		data.setdefault("next_action", "final_answer")
 		
-		return data		
+		return data
 		
-	def think(self, messages, memories):		
-		memories_str = format_memories_to_string(memories, "You don't have any memories of this user yet!")
-		
+	def think(self, messages, memories):
+		"""Generates the AI's internal thoughts and emotions"""
+		memories_str = format_memories_to_string(
+			memories,
+			"You don't have any memories of this user yet!"
+		)
+
 		content = messages[-1]["content"]
-		
+
 		img_data = None
 		if isinstance(content, list):
 			assert len(content) == 2
@@ -142,7 +147,7 @@ class ThoughtSystem:
 			{"role":"system", "content":self.config.system_prompt},
 			{"role":"user", "content":"[START OF PREVIOUS CHAT HISTORY]"},
 			*messages[:-1],
-			{"role":"user", "content":"[END OF PREVIOUS CHAT HISTORY]"},	
+			{"role":"user", "content":"[END OF PREVIOUS CHAT HISTORY]"},
 			{"role":"user", "content":prompt_content}
 		]
 		model = get_model_to_use(messages)
@@ -153,32 +158,32 @@ class ThoughtSystem:
 			return_json=True,
 			schema=THOUGHT_SCHEMA
 		)
-		
+
 		data = self._check_and_fix_thought_output(data)
 		thought_history.append({
 			"role": "assistant",
 			"content": json.dumps(data, indent=4)
 		})
-		
+
 		if self.show_thoughts:
 			print(f"{self.config.name}'s thoughts:")
 			for thought in data["thoughts"]:
 				print(f"- {thought}")
 			print()
-			
+
 		thoughts_query = " ".join(data["thoughts"])
-		
+
 		num_steps = 0
 		while data["next_action"].lower() == "continue":
 			num_steps += 1
 			added_context = ""
 			relevant_memories = self.memory_system.long_term.retrieve(thoughts_query, MEMORY_RETRIEVAL_TOP_K)
-			
+
 			if relevant_memories:
 				added_context = ADDED_CONTEXT_TEMPLATE.format(
 					"\n".join(mem.format_memory() for mem in memories)
 				)
-			
+
 			thought_history.append({
 				"role": "user",
 				"content": HIGHER_ORDER_THOUGHTS.format(added_context=added_context)
@@ -189,14 +194,14 @@ class ThoughtSystem:
 				return_json=True,
 				schema=THOUGHT_SCHEMA
 			)
-			new_data = self._check_and_fix_thought_output(new_data)	
+			new_data = self._check_and_fix_thought_output(new_data)
 			thought_history.append({
 				"role": "assistant",
 				"content": json.dumps(new_data, indent=4)
 			})
 			thoughts_query = " ".join(new_data["thoughts"])
 		
-			if self.show_thoughts:			
+			if self.show_thoughts:
 				for thought in new_data["thoughts"]:
 					print(f"- {thought}")
 				print()
