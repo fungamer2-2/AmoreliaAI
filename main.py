@@ -1,6 +1,5 @@
 #pylint:disable=C0103
 #pylint:disable=C0114
-#pylint:disable=C0116
 import os
 import traceback
 import json
@@ -37,18 +36,25 @@ class MessageBuffer:
 		self.system_prompt = ""
 
 	def set_system_prompt(self, prompt):
+		"""Sets the system prompt."""
 		self.system_prompt = prompt.strip()
 
 	def add_message(self, role, content):
+		"""Adds a message to the buffer."""
 		self.messages.append({"role": role, "content": content})
 		
 	def pop(self):
+		"""Removes and returns the last message."""
 		return self.messages.pop()
 
 	def flush(self):
+		"""Clears the buffer, removing all messages."""
 		self.messages.clear()
 		
 	def to_list(self, include_system_prompt=True):
+		"""Converts the buffer to a list of messages.
+		The system prompt is included by default, but you can set include_system_prompt=False
+		to not include it."""
 		history = []
 		if include_system_prompt and self.system_prompt:
 			history.append({"role":"system", "content":self.system_prompt})
@@ -85,6 +91,7 @@ Here is the conversation history so far:
 Possible **HUMAN** responses:"""
 	
 def suggest_responses(conversation):
+	"""Generates a list of potential user responses given the conversation history."""
 	role_map = {
 		"user": "HUMAN",
 		"assistant": "AI"
@@ -178,6 +185,7 @@ class AISystem:
 		return self.emotion_system.mood
 			
 	def on_startup(self):
+		"""Runs when the AI system is loaded."""
 		self.buffer.flush()
 		self.last_tick = datetime.now()
 		self.tick()
@@ -314,6 +322,7 @@ class AISystem:
 		return response
 		
 	def set_thought_visibility(self, shown: bool):
+		"""Sets the flag for whether or not to show the AI's internal thoughts."""
 		self.thought_system.show_thoughts = shown
 
 	def tick(self):
@@ -331,11 +340,13 @@ class AISystem:
 		self.last_tick = now
 		
 	def save(self, path):
+		"""Saves the AI system to the path"""
 		with open(path, "wb") as file:
 			pickle.dump(self, file)
 	
 	@staticmethod
 	def load(path):
+		"""Loads the AI system from the path. Returns None if it doesn't exist."""
 		if os.path.exists(path):
 			with open(path, "rb") as file:
 				return pickle.load(file)
@@ -344,6 +355,7 @@ class AISystem:
 			
 	@classmethod
 	def load_or_create(cls, path):
+		"""Loads the AI system from the path, or creates it if it doesn't exist."""
 		ai_system = cls.load(path)
 		if ai_system is None:
 			ai_system = AISystem()
