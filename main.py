@@ -13,7 +13,8 @@ from llm import MistralLLM
 from utils import (
 	clear_screen,
 	get_model_to_use,
-	is_image_url
+	is_image_url,
+	format_memories_to_string
 )
 from emotion_system import (
 	EmotionSystem,
@@ -22,8 +23,12 @@ from emotion_system import (
 )
 from memory_system import MemorySystem
 from thought_system import ThoughtSystem
-from const import *
 
+from const import (
+	AI_SYSTEM_PROMPT,
+	USER_TEMPLATE,
+	SAVE_PATH
+)
 
 class MessageBuffer:
 	"""
@@ -198,8 +203,8 @@ class AISystem:
 					},
 					{
 						"type": "text",
-						"text": "Please describe in detail what you see in this image. "
-								"Make sure to include specific details, such as style, colors, etc."
+						"text": "Please describe in detail what you see in this image. \
+							Make sure to include specific details, such as style, colors, etc."
 					}
 				]
 			}
@@ -220,6 +225,36 @@ class AISystem:
 		user_msg += user_input
 
 		return f"User: {user_msg}\n\nAI: {ai_response}"
+		
+	def _get_format_data(self, content, thought_data, memories):
+		now = datetime.now()
+		user_emotions = thought_data["possible_user_emotions"]
+		user_emotion_list_str =  ", ".join(user_emotions)
+		if user_emotions:
+			user_emotion_str = (
+				"The user appears to be feeling the following emotions: "
+				+ user_emotion_list_str
+			)
+		else:
+			user_emotion_str = "The user doesn't appear to show any strong emotion."
+
+		thought_str = "\n".join("- " + thought for thought in thought_data["thoughts"])
+		return {
+			"name": self.config.name,
+			"personality_summary": self.personality_system.get_summary(),
+			"user_input": content,
+			"ai_thoughts": thought_str,
+			"emotion": thought_data["emotion"],
+			"emotion_reason": thought_data["emotion_reason"],
+			"emotion_influence": thought_data["emotion_influence"],
+			"memories": format_memories_to_string(
+				memories,
+				"You don't have any memories of this user yet!"
+			),
+			"curr_date": now.strftime("%a, %-m/%-d/%Y"),
+			"curr_time": now.strftime("%-I:%M %p"),
+			"user_emotion_str": user_emotion_str
+		}
 
 	def send_message(self, user_input: str, attached_image=None, return_json=False):
 		"""Sends a message to the AI, and returns the response."""
@@ -247,24 +282,10 @@ class AISystem:
 		memories = self.memory_system.recall_memories(history)
 		memories.sort(key=lambda memory: memory.timestamp)
 
-		memories_str = (
-			"\n".join(mem.format_memory() for mem in memories)
-			if memories
-			else "You don't have any memories of this user yet!"
-		)
 		thought_data = self.thought_system.think(
 			self.get_message_history(False),
 			memories
 		)
-		user_emotions = thought_data["possible_user_emotions"]
-		user_emotion_list_str =  ", ".join(user_emotions)
-		if user_emotions:
-			user_emotion_str = (
-				"The user appears to be feeling the following emotions: "
-				+ user_emotion_list_str
-			)
-		else:
-			user_emotion_str = "The user doesn't appear to show any strong emotion."
 
 		content = history[-1]["content"]
 
@@ -278,20 +299,9 @@ class AISystem:
 		else:
 			text_content = content
 
-		prompt = USER_TEMPLATE.format(
-			name=self.config.name,
-			user_input=text_content,
-			personality_summary=self.personality_system.get_summary(),
-			ai_thoughts="\n".join("- " + thought for thought in thought_data["thoughts"]),
-			emotion=thought_data["emotion"],
-			emotion_reason=thought_data["emotion_reason"],
-			emotion_influence=thought_data["emotion_influence"],
-			curr_date=datetime.now().strftime("%a, %-m/%-d/%Y"),
-			curr_time=datetime.now().strftime("%-I:%M %p"),
-			memories=memories_str,
-			user_emotion_str=user_emotion_str
+		prompt_content = USER_TEMPLATE.format(
+			**self._get_format_data(text_content, thought_data, memories)
 		)
-		prompt_content = prompt
 		if img_data:
 			prompt_content = [
 				img_data,
@@ -312,7 +322,7 @@ class AISystem:
 		self.tick()
 		new_response = response
 		if return_json:
-			new_response = json.dumps(response, indent=2)
+			response = json.dumps(new_response, indent=2)
 		self.buffer.add_message("assistant", new_response)
 		return response
 
@@ -335,6 +345,13 @@ class AISystem:
 				arousal=arousal,
 				dominance=dominance
 			)
+			
+	def set_relation(self, friendliness=None, dominance=None):
+		"""Sets the AI's relationship with the user"""
+		self.relation_system.set_relation(
+			friendliness=friendliness,
+			dominance=dominance
+		)
 
 	def tick(self):
 		"""Runs a tick to update the AI's systems"""
@@ -467,12 +484,12 @@ def main():
 				value = args[0]
 				if not isinstance(value, (int, float)):
 					continue
-				ai.relation_system.set_relation(friendliness=value)
+				ai.set_relation(friendliness=value)
 			elif command == "set_relation_dominance" and len(args) == 1:
 				value = args[0]
 				if not isinstance(value, (int, float)):
 					continue
-				ai.relation_system.set_relation(dominance=value)
+				ai.set_relation(dominance=value)
 			elif command == "show_thoughts":
 				ai.set_thought_visibility(True)
 			elif command == "hide_thoughts":
