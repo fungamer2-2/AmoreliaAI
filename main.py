@@ -31,8 +31,7 @@ from const import (
 )
 
 class MessageBuffer:
-	"""
-	A buffer that stores the most recent messages in the conversation, 
+	"""A buffer that stores the most recent messages in the conversation, 
 	flushing out older messages if they exceed the limit."""
 
 	def __init__(self, max_messages):
@@ -279,12 +278,13 @@ class AISystem:
 
 		history = self.get_message_history()
 
-		memories = self.memory_system.recall_memories(history)
+		memories, recalled_memories = self.memory_system.recall_memories(history)
 		memories.sort(key=lambda memory: memory.timestamp)
 
 		thought_data = self.thought_system.think(
 			self.get_message_history(False),
-			memories
+			memories,
+			recalled_memories
 		)
 
 		content = history[-1]["content"]

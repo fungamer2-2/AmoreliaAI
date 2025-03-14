@@ -4,7 +4,6 @@ import json_repair
 import time
 from dotenv import load_dotenv
 
-
 load_dotenv(".env")
 
 MISTRAL_API_CHAT_URL = "https://api.mistral.ai/v1/chat/completions"
@@ -12,6 +11,7 @@ MISTRAL_API_EMBED_URL = "https://api.mistral.ai/v1/embeddings"
 
 
 def mistral_request(messages, model, **kwargs):
+	"""Makes a chat completion request to the Mistral AI API"""
 	api_key = os.getenv("MISTRAL_API_KEY")
 	headers = {
 		"Accept": "application/json",
@@ -23,10 +23,9 @@ def mistral_request(messages, model, **kwargs):
 		"messages": messages,
 		**kwargs
 	}
-	
 	max_delay = 20
 	for tries in range(6):
-		response = requests.post(MISTRAL_API_CHAT_URL, json=data, headers=headers)
+		response = requests.post(MISTRAL_API_CHAT_URL, json=data, headers=headers, timeout=30)
 		if response.ok:
 			break
 		elif response.status_code == 429:
@@ -39,12 +38,12 @@ def mistral_request(messages, model, **kwargs):
 	else:
 		print(response.text)
 		response.raise_for_status()
-	
-	
+
 	return response.json()
 
-	
+
 def mistral_embed_texts(inputs):
+	"""Embeds a string or list of strings into a set of vector embeddings."""
 	api_key = os.getenv("MISTRAL_API_KEY")
 	headers = {
 		"Accept": "application/json",
@@ -54,11 +53,10 @@ def mistral_embed_texts(inputs):
 	data = {
 		"model": "mistral-embed",
 		"input": inputs
-	}
-	
+	}	
 	max_delay = 20
 	for tries in range(4):
-		response = requests.post(MISTRAL_API_EMBED_URL, json=data, headers=headers)
+		response = requests.post(MISTRAL_API_EMBED_URL, json=data, headers=headers, timeout=30)
 		if response.ok:
 			break
 		elif response.status_code == 429:
@@ -71,7 +69,7 @@ def mistral_embed_texts(inputs):
 	else:
 		print(response.text)
 		response.raise_for_status()
-	
+
 	embed_res = response.json()
 	if isinstance(inputs, str):
 		return embed_res["data"][0]["embedding"]
@@ -91,10 +89,11 @@ def _convert_system_to_user(messages):
 
 
 class MistralLLM:
-	
+	"""Class representing a model from the Mistral AI API"""
+
 	def __init__(self, model="mistral-large-latest"):
 		self.model = model
-		
+
 	def generate(
 		self,
 		prompt,
@@ -102,15 +101,16 @@ class MistralLLM:
 		schema=None,
 		**kwargs
 	):
+		"""Generates a completion from the model given a prompt"""
 		if schema and not return_json:
 			raise ValueError("return_json must be True if schema is provided")
 		if isinstance(prompt, str):
-			prompt = [{"role":"user", "content":prompt}]		
+			prompt = [{"role":"user", "content":prompt}]
 		if self.model not in ["mistral-small-latest", "mistral-large-latest"]:
 			prompt = _convert_system_to_user(prompt)
-		
+
 		if schema:
-			format = {
+			response_format = {
 				"type":"json_schema",
 				"json_schema":{
 					"name": "json_format",
@@ -119,18 +119,17 @@ class MistralLLM:
 				}
 			}
 		else:
-			format = {"type":"json_object"} if return_json else {"type":"text"} 
+			response_format = {"type":"json_object"} if return_json else {"type":"text"}
 		response = mistral_request(
 			prompt,
 			**kwargs,
 			model=self.model,
-			response_format=format
+			response_format=response_format
 		)
-		
+
 		response = response["choices"][0]["message"]["content"]
-		
+
 		if return_json:
 			return json_repair.loads(response)
-			
+
 		return response
-	
