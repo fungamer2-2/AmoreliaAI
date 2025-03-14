@@ -9,6 +9,7 @@ from utils import (
 	get_model_to_use,
 	format_memories_to_string
 )
+from emotion_system import Emotion
 
 
 class ThoughtSystem:
@@ -106,13 +107,20 @@ class ThoughtSystem:
 		
 		return data
 		
-	def think(self, messages, memories):
+	def think(self, messages, memories, recalled_memories):
 		"""Generates the AI's internal thoughts and emotions"""
 		memories_str = format_memories_to_string(
 			memories,
 			"You don't have any memories of this user yet!"
 		)
-
+		
+		memory_emotion = Emotion()
+		if recalled_memories:
+			for memory in recalled_memories:
+				memory_emotion += memory.emotion
+			memory_emotion /= len(recalled_memories)	
+			self.emotion_system.add_emotion(memory_emotion / 4)
+		
 		content = messages[-1]["content"]
 
 		img_data = None
@@ -214,7 +222,7 @@ class ThoughtSystem:
 		
 		self.emotion_system.experience_emotion(
 			data["emotion"],
-			data["emotion_intensity"]/10
+			data["emotion_intensity"]
 		)
 		
 		return data
