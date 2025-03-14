@@ -1,10 +1,10 @@
 import uuid
-import numpy as np
 import random
 import math
-
 from collections import deque
 from datetime import datetime
+
+import numpy as np
 from rank_bm25 import BM25Okapi
 
 from const import * 
@@ -121,7 +121,7 @@ class LSHMemory:
 		return hash_ind
 		
 	def _cluster_memories(self, bucket):
-		threshold = 0.9
+		threshold = 0.95
 		representatives = []
 		for memory in bucket:
 			embed = memory.embedding
@@ -148,13 +148,23 @@ class LSHMemory:
 			clusters[idx].append(memory)
 		return clusters
 		
-	def _prune_similar_memories(self, bucket):
-		# Prunes similar/less important memories
-		# TODO: Finish this
-		clusters = self._cluster_memories(bucket)
-		# Memories are more likely to be pruned based on:
-		# Higher similarity to other memories
-							
+	#def _prune_similar_memories(self, bucket):
+#		# Prunes similar/less important memories		
+#		max_duplicates_allowed = 3
+#		clusters = self._cluster_memories(bucket)
+#		
+#		# Memories are more likely to be pruned based on:
+#		# Higher similarity to other memories
+#		for cluster in clusters:
+#			cluster.sort(key=lambda m: m.get_recency_factor(), reverse=True)
+#			to_remove = cluster[max_duplicates_allowed:]
+#			for memory in to_remove:
+#				self.delete_memory(memory)
+#			
+	#def prune_memories(self):
+#		for bucket in self.table.values():
+#			self._prune_similar_memories(bucket)
+#						
 	def add_memory(self, memory):
 		self.count += 1
 		vec = memory.embedding
@@ -240,8 +250,6 @@ class LSHMemory:
 class ShortTermMemory:
 	capacity = 20
 	
-	# TODO: Add better memory rehearsal mechanism
-
 	def __init__(self):
 		self.memories = deque()
 		
@@ -299,7 +307,7 @@ class LongTermMemory:
 	
 	def __init__(self):
 		self.lsh = LSHMemory(LSH_NUM_BITS, LSH_VEC_DIM)
-	
+		
 	def retrieve(self, query, k, remove=False):
 		return self.lsh.retrieve(query, k, remove=remove)
 	
@@ -371,7 +379,7 @@ class MemorySystem:
 			self.long_term.add_memory(memory)
 		timedelta = now - self.last_memory
 		if timedelta.total_seconds() > 6 * 3600:
-			# Consolidate memories after 6 hours of inactivity
+			# Consolidate memories after 6 hours of inactivity		
 			self.consolidate_memories()
 			self.last_memory = now
 		
@@ -400,7 +408,7 @@ class MemorySystem:
 	def recall_memories(self, messages):
 		messages = [msg for msg in messages if msg["role"] != "system"]
 		context = conversation_to_string(messages[-3:])
-		self.recall(context)
-		return self.get_short_term_memories()
+		recalled_memories = self.recall(context)
+		return self.get_short_term_memories(), recalled_memories
 
 

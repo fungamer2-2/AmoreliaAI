@@ -1,5 +1,6 @@
 import math
 import time
+import random
 from datetime import datetime
 from const import *
 from utils import num_to_str_sign, val_to_symbol_color
@@ -223,8 +224,9 @@ class RelationshipSystem:
 		relation_change_mult = 2.5
 		
 		pleasure, _, dominance = EMOTION_MAP[emotion]
-		pleasure *= intensity
-		dominance *= intensity
+		
+		pleasure *= intensity * random.triangular(0.8, 1.2)
+		dominance *= intensity * random.triangular(0.8, 1.2)
 		
 		self.friendliness += pleasure * relation_change_mult
 		self.dominance += dominance * relation_change_mult
@@ -260,7 +262,7 @@ class EmotionSystem:
 		)
 		self.relation = relation_system
 		self.base_mood = base_mood
-		self.reset_mood()
+		self.mood = self.get_base_mood() / 2
 		self.last_update = time.time()
 		self.emotions = []
 		
@@ -271,14 +273,13 @@ class EmotionSystem:
 		dominance=None
 	):
 		if pleasure is not None:
-			self.mood.pleasure = pleasure
+			self.mood.pleasure = max(-1.0, min(1.0, pleasure))
 		if arousal is not None:
-			self.mood.arousal = arousal
+			self.mood.arousal = max(-1.0, min(1.0, arousal))
 		if dominance is not None:
-			self.mood.dominance = dominance
+			self.mood.dominance = max(-1.0, min(1.0, dominance))
 		
-		self.mood.clamp()
-		
+
 	def reset_mood(self):
 		self.mood = self.get_base_mood() / 2
 		
@@ -353,7 +354,12 @@ class EmotionSystem:
 		return f"{mood_desc} - {prompt}"
 
 	def experience_emotion(self, name, intensity):
-		emotion = Emotion(*EMOTION_MAP[name])		
+		intensity /= 10
+		emotion = Emotion(*EMOTION_MAP[name])
+		emotion.pleasure *= random.triangular(0.9, 1.1)
+		emotion.arousal *= random.triangular(0.9, 1.1)
+		emotion.dominance *= random.triangular(0.9, 1.1)
+		
 		mood_align = emotion.dot(self.mood)
 		personality_align = emotion.dot(self.get_base_mood())
 		
@@ -361,7 +367,12 @@ class EmotionSystem:
 		intensity += intensity_mod
 		intensity = max(0.05, min(intensity, 1.0))
 		self.relation.on_emotion(name, intensity)
-		self.emotions.append(emotion * intensity)
+		emotion *= intensity	
+		self.add_emotion(emotion)
+		return emotion
+		
+	def add_emotion(self, emotion):
+		self.emotions.append(emotion)
 
 	def _tick_emotion_change(self, t):
 		new_emotions = []		
@@ -396,13 +407,6 @@ class EmotionSystem:
 			self.mood.clamp()
 			return True
 		return False
-		
-	def get_mood_time_mult(self):
-		personality_align = 0.5 * self.mood.dot(self.get_base_mood())
-		if personality_align > 0:
-			return 1 + personality_align
-		else:
-			return 1 / (abs(personality_align) + 1)
 			
 	def get_base_mood(self):
 		now = datetime.now()
@@ -427,7 +431,7 @@ class EmotionSystem:
 		base_mood.arousal += energy_cycle_mod  # Higher during the daytime, lower at night
 		base_mood.clamp()
 		return base_mood
-		
+
 	def _tick_mood_decay(self, t):		
 		half_life = MOOD_HALF_LIFE #* self.get_mood_time_mult()
 		
@@ -438,17 +442,17 @@ class EmotionSystem:
 	def tick(self, t=None):
 		if t is None:
 			t = time.time() - self.last_update
-			
+	
 		self.last_update = time.time()
 		while t > 0:
-			step = min(t, 1)
+			step = min(t, 1.0)
 			if not self._tick_emotion_change(step):
 				break
 			t -= step
-		
+
 		if t <= 0:
 			return
-		
+
 		self._tick_mood_decay(t)
 		
 		
