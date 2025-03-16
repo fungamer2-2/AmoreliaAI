@@ -153,7 +153,7 @@ class AISystem:
 	
 		self.config = config
 		self.personality_system = PersonalitySystem(
-			open=personality.open,
+			openness=personality.open,
 			conscientious=personality.conscientious,
 			extrovert=personality.extrovert,
 			agreeable=personality.agreeable,
@@ -318,7 +318,10 @@ class AISystem:
 			return_json=return_json
 		)
 
-		self.memory_system.remember(self._input_to_memory(user_input, response, attached_image))
+		self.memory_system.remember(
+			self._input_to_memory(user_input, response, attached_image),
+			emotion=thought_data["emotion_obj"]
+		)
 		self.tick()
 		new_response = response
 		if return_json:

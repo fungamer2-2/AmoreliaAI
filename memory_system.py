@@ -14,6 +14,7 @@ from utils import (
 	get_approx_time_ago_str,
 	conversation_to_string
 )
+from emotion_system import Emotion
 
 
 IMPORTANCE_PROMPT = """Your task is to rate the importance of the given memory from 1 to 10.
@@ -62,7 +63,7 @@ def cosine_similarity(x, y):
 class Memory:
 	"""Represents a stored memory"""
 		
-	def __init__(self, content, strength=1):
+	def __init__(self, content, strength=1, emotion=None):
 		now = datetime.now()
 		self.timestamp = now
 		self.last_accessed = now
@@ -70,6 +71,7 @@ class Memory:
 		self.embedding = None
 		self.id = str(uuid.uuid4())
 		self.strength = strength
+		self.emotion = emotion or Emotion()
 
 	def get_recency_factor(self):
 		"""Returns the recency value of a memory, based on time and strength"""
@@ -381,12 +383,12 @@ class MemorySystem:
 		"""Resets the importance counter"""
 		self.importance_counter = 0.0
 	
-	def remember(self, content):
+	def remember(self, content, emotion=None):
 		"""Adds a new memory"""
 		importance = get_importance(content)
 		strength = 1 + (importance - 1) / 2
 		self.last_memory = datetime.now()
-		self.short_term.add_memory(Memory(content, strength=strength))
+		self.short_term.add_memory(Memory(content, strength=strength, emotion=emotion))
 		self.importance_counter += importance / 10
 
 	def recall(self, query):
@@ -400,7 +402,7 @@ class MemorySystem:
 	
 	def tick(self, dt):
 		"""Runs an update tick"""
-		now = datetime.now() 
+		now = datetime.now()
 		old_memories = self.short_term.flush_old_memories()
 		for memory in old_memories:
 			self.long_term.add_memory(memory)

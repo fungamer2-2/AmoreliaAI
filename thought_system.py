@@ -118,7 +118,7 @@ class ThoughtSystem:
 		if recalled_memories:
 			for memory in recalled_memories:
 				memory_emotion += memory.emotion
-			memory_emotion /= len(recalled_memories)	
+			memory_emotion /= len(recalled_memories)
 			self.emotion_system.add_emotion(memory_emotion / 4)
 		
 		content = messages[-1]["content"]
@@ -220,9 +220,10 @@ class ThoughtSystem:
 			if num_steps >= MAX_THOUGHT_STEPS:
 				break
 		
-		self.emotion_system.experience_emotion(
+		emotion = self.emotion_system.experience_emotion(
 			data["emotion"],
 			data["emotion_intensity"]
 		)
+		data["emotion_obj"] = emotion
 		
 		return data

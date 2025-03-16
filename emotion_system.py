@@ -37,8 +37,8 @@ def summarize_personality(openness, conscientious, extrovert, agreeable, neuroti
 class PersonalitySystem:
 	"""The system that defines the AI's personality"""
 
-	def __init__(self, open, conscientious, extrovert, agreeable, neurotic):
-		self.open = open
+	def __init__(self, openness, conscientious, extrovert, agreeable, neurotic):
+		self.open = openness
 		self.conscientious = conscientious
 		self.extrovert = extrovert
 		self.agreeable = agreeable
@@ -66,7 +66,7 @@ class Emotion:
 		pleasure=0.0,
 		arousal=0.0,
 		dominance=0.0
-	):	
+	):
 		self.pleasure = pleasure
 		self.arousal = arousal
 		self.dominance = dominance
@@ -364,11 +364,14 @@ class EmotionSystem:
 		mood_align = emotion.dot(self.mood)
 		personality_align = emotion.dot(self.get_base_mood())
 		
-		intensity_mod = MODD_INTENSITY_FACTOR * mood_align + PERSONALITY_INTENSITY_FACTOR * personality_align 
+		intensity_mod = (
+			MODD_INTENSITY_FACTOR * mood_align
+			+ PERSONALITY_INTENSITY_FACTOR * personality_align
+		)
 		intensity += intensity_mod
 		intensity = max(0.05, min(intensity, 1.0))
 		self.relation.on_emotion(name, intensity)
-		emotion *= intensity	
+		emotion *= intensity
 		self.add_emotion(emotion)
 		return emotion
 		
