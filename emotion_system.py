@@ -8,17 +8,18 @@ from llm import MistralLLM
 from colored import Fore
 
 
-def get_default_mood(open, conscientious, extrovert, agreeable, neurotic):
-	pleasure = 0.12 * extrovert + 0.59 * agreeable - 0.19 * neurotic 
-	arousal = 0.15 * open + 0.3 * agreeable + 0.57 * neurotic
-	dominance = 0.25 * open + 0.17 * conscientious + 0.6 * extrovert - 0.32 * agreeable
+def get_default_mood(openness, conscientious, extrovert, agreeable, neurotic):
+	# Unlike the other components, lower neuroticism is better
+	pleasure = 0.12 * extrovert + 0.59 * agreeable - 0.19 * neurotic
+	arousal = 0.15 * openness + 0.3 * agreeable + 0.57 * neurotic
+	dominance = 0.25 * openness + 0.17 * conscientious + 0.6 * extrovert - 0.32 * agreeable
 	return (pleasure, arousal, dominance)
 	
 
-def summarize_personality(open, conscientious, extrovert, agreeable, neurotic):
+def summarize_personality(openness, conscientious, extrovert, agreeable, neurotic):
 	model = MistralLLM("mistral-small-latest")
 	personality_str = "\n".join([
-		f"Openness: {num_to_str_sign(open, 2)}",
+		f"Openness: {num_to_str_sign(openness, 2)}",
 		f"Conscientiousness: {num_to_str_sign(conscientious, 2)}",
 		f"Extroversion: {num_to_str_sign(extrovert, 2)}",
 		f"Agreeableness: {num_to_str_sign(agreeable, 2)}",
