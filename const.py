@@ -1,3 +1,5 @@
+"""The set of constantd used in the program."""
+
 NEG_EMOTION_MULT = 1.5
 EMOTION_HALF_LIFE = 6
 MOOD_HALF_LIFE = 8 * 60
