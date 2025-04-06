@@ -9,6 +9,7 @@ from llm import MistralLLM
 
 
 def clear_screen():
+	"""Clears the screen."""
 	os.system("cls" if os.name == "nt" else "clear")
 
 
@@ -106,7 +107,7 @@ def normalize_text(text):
 	return text
 
 
-def conversation_to_string(messages, ai_name="AI"):	
+def conversation_to_string(messages, ai_name="AI"):
 	role_map = {
 		"user": "User",
 		"assistant": ai_name

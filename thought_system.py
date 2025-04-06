@@ -13,7 +13,7 @@ from emotion_system import Emotion
 
 
 class ThoughtSystem:
-	
+
 	def __init__(
 		self,
 		config,
@@ -31,7 +31,7 @@ class ThoughtSystem:
 		self.show_thoughts = True
 		self.reflection_counter = 0
 		self.last_reflection = datetime.now()
-		
+	
 	def can_reflect(self):
 		"""Determines whether the AI should reflect on its memories and gain insights."""
 		return (
@@ -39,7 +39,7 @@ class ThoughtSystem:
 			and (datetime.now() - self.last_reflection).total_seconds() > 3 * 3600
 			and len(self.memory_system.get_short_term_memories()) >= 5
 		)
-			
+		
 	def reflect(self):
 		"""Performs 'reflection' - the AI can reflect on its memories to gain higher-level insights."""	
 		recent_memories = self.memory_system.get_short_term_memories()
@@ -88,39 +88,45 @@ class ThoughtSystem:
 
 	def _check_and_fix_thought_output(self, data):
 		data = data.copy()
+	
+		data.setdefault("possible_user_emotions", [])
+	
 		data.setdefault("emotion_intensity", 5)
 		data["emotion_intensity"] = int(data["emotion_intensity"])
-		
+	
 		data.setdefault("thoughts", [])
 		data.setdefault("emotion", "Neutral")
 		data.setdefault("emotion_reason", "I feel this way based on how the conversation has been going.")
-		
+		data.setdefault("emotion_influence", "I will make sure to express this emotion in my response.")
 		if data["emotion"] not in EMOTION_MAP:
-			for em in EMOTION_MAP:
-				if em.lower() == data["emotion"].lower():
-					data["emotion"] = em
+			for emotion in EMOTION_MAP:
+				if emotion.lower() == data["emotion"].lower():
+					data["emotion"] = emotion
 					break
 			else:
 				data["emotion"] = "Neutral"
-		
+
 		data.setdefault("next_action", "final_answer")
-		
+
 		return data
-		
+	
 	def think(self, messages, memories, recalled_memories):
 		"""Generates the AI's internal thoughts and emotions"""
 		memories_str = format_memories_to_string(
 			memories,
 			"You don't have any memories of this user yet!"
 		)
-		
+
 		memory_emotion = Emotion()
 		if recalled_memories:
+			total_weight = 0.0
 			for memory in recalled_memories:
-				memory_emotion += memory.emotion
-			memory_emotion /= len(recalled_memories)
-			self.emotion_system.add_emotion(memory_emotion / 4)
-		
+				weight = memory.get_recency_factor(True)
+				memory_emotion += memory.emotion * weight
+				total_weight += weight
+			memory_emotion /= total_weight
+			self.emotion_system.add_emotion(memory_emotion * 0.3)
+
 		content = messages[-1]["content"]
 
 		img_data = None
@@ -132,7 +138,7 @@ class ThoughtSystem:
 			img_data = content[0]
 		else:
 			text_content = content
-		
+	
 		prompt = THOUGHT_PROMPT.format(
 			name=self.config.name,
 			user_input=text_content,
@@ -150,7 +156,7 @@ class ThoughtSystem:
 				{"type":"text", "text":prompt_content},
 				img_data
 			]
-		
+
 		thought_history = [
 			{"role":"system", "content":self.config.system_prompt},
 			{"role":"user", "content":"[START OF PREVIOUS CHAT HISTORY]"},
@@ -159,7 +165,7 @@ class ThoughtSystem:
 			{"role":"user", "content":prompt_content}
 		]
 		model = get_model_to_use(messages)
-			
+		
 		data = model.generate(
 			thought_history,
 			temperature=0.8,
@@ -178,9 +184,8 @@ class ThoughtSystem:
 			for thought in data["thoughts"]:
 				print(f"- {thought}")
 			print()
-
+	
 		thoughts_query = " ".join(data["thoughts"])
-
 		num_steps = 0
 		while data["next_action"].lower() == "continue":
 			num_steps += 1
@@ -213,17 +218,17 @@ class ThoughtSystem:
 				for thought in new_data["thoughts"]:
 					print(f"- {thought}")
 				print()
-			
+	
 			all_thoughts = data["thoughts"] + new_data["thoughts"]
 			data = new_data.copy()
 			data["thoughts"] = all_thoughts
 			if num_steps >= MAX_THOUGHT_STEPS:
 				break
-		
+
 		emotion = self.emotion_system.experience_emotion(
 			data["emotion"],
 			data["emotion_intensity"]
 		)
 		data["emotion_obj"] = emotion
-		
+
 		return data

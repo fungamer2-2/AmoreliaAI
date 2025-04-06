@@ -63,7 +63,7 @@ def cosine_similarity(x, y):
 class Memory:
 	"""Represents a stored memory"""
 		
-	def __init__(self, content, strength=1, emotion=None):
+	def __init__(self, content, strength=1.0, emotion=None):
 		now = datetime.now()
 		self.timestamp = now
 		self.last_accessed = now
@@ -73,9 +73,10 @@ class Memory:
 		self.strength = strength
 		self.emotion = emotion or Emotion()
 
-	def get_recency_factor(self):
+	def get_recency_factor(self, from_creation=False):
 		"""Returns the recency value of a memory, based on time and strength"""
-		seconds = (datetime.now() - self.last_accessed).total_seconds()
+		t = self.timestamp if from_creation else self.last_accessed
+		seconds = (datetime.now() - t).total_seconds()
 		days = seconds / 86400
 		return math.exp(-days / (self.strength * MEMORY_DECAY_TIME_MULT))
 

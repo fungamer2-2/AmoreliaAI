@@ -1,3 +1,5 @@
+"""The system that manages the AI's emotions"""
+
 import math
 import time
 import random
@@ -9,6 +11,7 @@ from colored import Fore
 
 
 def get_default_mood(openness, conscientious, extrovert, agreeable, neurotic):
+	"""Converts the big five personality values into a PAD emotion vectoe"""
 	# Unlike the other components, lower neuroticism is better
 	pleasure = 0.12 * extrovert + 0.59 * agreeable - 0.19 * neurotic
 	arousal = 0.15 * openness + 0.3 * agreeable + 0.57 * neurotic
@@ -17,6 +20,7 @@ def get_default_mood(openness, conscientious, extrovert, agreeable, neurotic):
 	
 
 def summarize_personality(openness, conscientious, extrovert, agreeable, neurotic):
+	"""Summarizes the personality values into a natural language personality description."""
 	model = MistralLLM("mistral-small-latest")
 	personality_str = "\n".join([
 		f"Openness: {num_to_str_sign(openness, 2)}",
@@ -47,6 +51,7 @@ class PersonalitySystem:
 		self.summary = ""
 	
 	def get_summary(self):
+		"""Generates a summary of the personality values"""
 		if not self.summary:
 			self.summary = summarize_personality(
 				self.open,
@@ -60,7 +65,7 @@ class PersonalitySystem:
 
 class Emotion:
 	"""The 3D vector that defines emotions or mood"""
-	
+
 	def __init__(
 		self,
 		pleasure=0.0,
@@ -70,9 +75,10 @@ class Emotion:
 		self.pleasure = pleasure
 		self.arousal = arousal
 		self.dominance = dominance
-		
+	
 	@classmethod
 	def from_personality(cls, openness, conscientious, extrovert, agreeable, neurotic):
+		"""Converts the given personality values into an Emotion vector object"""
 		return cls(*get_default_mood(openness, conscientious, extrovert, agreeable, neurotic))
 	
 	def __add__(self, other):
@@ -154,28 +160,28 @@ class Emotion:
 			+ self.arousal * other.arousal
 			+ self.dominance * other.dominance
 		)
-		
-	def get_intensity(self):
-		
-		return math.sqrt(self.pleasure**2 + self.arousal ** 2 + self.dominance**2)
 	
+	def get_intensity(self):
+		"""Gets the intensity of the emotion"""
+		return math.sqrt(self.pleasure**2 + self.arousal ** 2 + self.dominance**2)
+
 	def distance(self, other):
 		"""Returns the distance between two emotions"""
-		dp = self.pleasure - other.pleasure
-		da = self.arousal - other.arousal
-		dd = self.dominance - other.dominance
-		
-		return math.sqrt(dp**2 + da**2 + dd**2)
-		
-	def get_norm(self):
+		delta_pleasure = self.pleasure - other.pleasure
+		delta_arousal = self.arousal - other.arousal
+		delta_dominance = self.dominance - other.dominance
+
+		return math.sqrt(delta_pleasure**2 + delta_arousal**2 + delta_dominance**2)
+
+	def _get_norm(self):
 		return max(abs(self.pleasure), abs(self.arousal), abs(self.dominance))
-		
+
 	def clamp(self):
 		"""Clips the emotion vector by norm if it is outside the range"""
-		norm = self.get_norm()
+		norm = self._get_norm()
 		if norm > 1:
 			self /= norm
-			
+	
 	def copy(self):
 		"""Creates a copy of this emotion vector.
 		Changes to the copy will not affect the original"""
@@ -183,7 +189,7 @@ class Emotion:
 			self.pleasure,
 			self.arousal,
 			self.dominance
-		) 
+		)
 		
 	def is_same_octant(self, other):
 		"""Checks whether two emotions are in the same octant."""
@@ -192,17 +198,18 @@ class Emotion:
 			and (self.arousal >= 0) == (other.arousal >= 0)
 			and (self.dominance >= 0) == (other.dominance >= 0)
 		)
-		
+	
 	def __repr__(self):
-		return f"{self.__class__.__name__}({round(self.pleasure, 2):.2f}, {round(self.arousal, 2):.2f}, {round(self.dominance, 2):.2f})"
+		return f"{self.__class__.__name__}({round(self.pleasure, 2):.2f}, " \
+			f"{round(self.arousal, 2):.2f}, {round(self.dominance, 2):.2f})"
 
 
 class RelationshipSystem:
-	
+
 	def __init__(self):
 		self.friendliness = 0.0
 		self.dominance = 0.0
-		
+	
 	def set_relation(
 		self,
 		friendliness=None,
@@ -212,26 +219,26 @@ class RelationshipSystem:
 			self.friendliness = max(-100, min(friendliness, 100))
 		if dominance is not None:
 			self.dominance = max(-100, min(dominance, 100))
-		
+	
 	def tick(self, dt):
 		num_days = dt / 86400
 		self.friendliness *= math.exp(-num_days/40)
 		self.dominance *= math.exp(-num_days/80)
-	
+
 	def on_emotion(self, emotion, intensity):
 		if emotion not in ["Joy", "Distress", "Admiration", "Reproach", "Gratitude", "Anger"]:
 			return
-			
+		
 		relation_change_mult = 2.5
-		
+	
 		pleasure, _, dominance = EMOTION_MAP[emotion]
-		
+	
 		pleasure *= intensity * random.triangular(0.8, 1.2)
 		dominance *= intensity * random.triangular(0.8, 1.2)
-		
+	
 		self.friendliness += pleasure * relation_change_mult
 		self.dominance += dominance * relation_change_mult
-		
+	
 	def print_relation(self):
 		print("Relationship:")
 		print("-------------")
@@ -239,16 +246,16 @@ class RelationshipSystem:
 		print(f"Friendliness: {string}")
 		string = val_to_symbol_color(self.dominance, 20, Fore.cyan, Fore.light_magenta, val_scale=100)		
 		print(f"Dominance:    {string}")
-		
+	
 	def get_string(self):
 		return "\n".join((
 			"Friendliness: " + val_to_symbol_color(self.friendliness, 20, val_scale=100),
 			"Dominance: " + val_to_symbol_color(self.dominance, 20, val_scale=100)
 		))
 		
-		
-class EmotionSystem:
 	
+class EmotionSystem:
+
 	def __init__(
 		self,
 		personality_system,
@@ -266,7 +273,7 @@ class EmotionSystem:
 		self.mood = self.get_base_mood() / 2
 		self.last_update = time.time()
 		self.emotions = []
-		
+	
 	def set_emotion(
 		self,
 		pleasure=None,
@@ -279,11 +286,10 @@ class EmotionSystem:
 			self.mood.arousal = max(-1.0, min(1.0, arousal))
 		if dominance is not None:
 			self.mood.dominance = max(-1.0, min(1.0, dominance))
-		
 
 	def reset_mood(self):
 		self.mood = self.get_base_mood() / 2
-		
+	
 	def _get_mood_word(self, val, pos_str, neg_str):
 		if abs(val) < 0.04:
 			return "neutral"
