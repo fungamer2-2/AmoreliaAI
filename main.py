@@ -546,6 +546,7 @@ def main():
 		except Exception as e:  # pylint: disable=W0718,C0103
 			traceback.print_exception(type(e), e, e.__traceback__)
 			print("An error occurred. Please try again in a moment.")
+			print("If the issue persists, please open an issue on GitHub: https://github.com/fungamer2-2/HumanlikeAI/issues/new?template=bug_report.md")
 		else:
 			print(f"{ai.config.name}: " + message)
 			ai.save(SAVE_PATH)

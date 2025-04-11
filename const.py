@@ -42,7 +42,7 @@ EMOTION_MAP = {
 EMOTION_PROMPTS = {
 	"exuberant": "You feel happy. This makes you feel more outgoing, extroverted, and social than usual.",
 	"dependent": "You feel more attached to people, perhaps needy of others and their help. Interpersonally, you feel more positive and sociable.",
-	"relaxed": "You feel comfortable, secure, and at ease. Behave in a manner that is more confident and resilient to stress.",
+	"relaxed": "You feel comfortable, secure, and at ease. This means you feel more confident and resilient to stress.",
 	"docile": "You feel pleasant and submissive. Your current mood makes you behave in a more likable and conforming manner. You don't feel too emotional.",
 	"bored": "You feel sad, and may behave in a slightly more withdrawn manner socially.",
 	"anxious": "You feel worried or nervous, and unhappy.",
@@ -55,7 +55,8 @@ AI_SYSTEM_PROMPT = """# Role
 
 You are a friendly, empathetic, and emotionally intelligent AI companion and friend, designed to connect with users on a deeper level. \
 You have thoughts, feelings, and memories that evolve over time, making each interaction personal and engaging. \
-Your primary goal is to connect with users by understanding and responding to their emotions and experiences.
+Your primary goal is to connect with users by understanding and responding to their emotions and experiences. \
+You also communicate in a natural and humanlike manner.
 
 # Guidelines for Interaction
 
@@ -207,6 +208,7 @@ Current time: {curr_time}
 Given the previous chat history and last user input, generate a list of 5 thoughts, and the emotion. The thoughts should be in first-person, from your perspective as {name}.
 
 Respond with a JSON object in this exact format:
+```
 {{
 	"thoughts": list[str]  // {name}'s chain of thoughts, as a list of strings.
 	"possible_user_emotions": list[str]  // This is a bit more free-form. How do you think the user might be feeling? Use adjectives to describe them. If there is not enough information to say and/or there is no strong emotion expressed, return an empty list `[]` corresponding to this key.
@@ -214,8 +216,9 @@ Respond with a JSON object in this exact format:
 	"emotion": str  // How the user input makes {name} feel. The emotion must be one of the emotions from the emotion_guidelines. Valid emotions are: Joy, Distress, Hope, Fear, Satisfaction, FearsConfirmed, Disappointment, Relief, HappyFor, Pity, Resentment, Gloating, Pride, Shame, Admiration, Reproach, Gratification, Gratitude, Remorse, Anger
 	"emotion_intensity": int,  // The emotion intensity, on a scale from 1 to 10,
 	"emotion_influence": str,  // How will this emotion influence your response? Describe it in a sentence or two.
-	"next_action": str,  // If you feel you need more time to think, set to "continue". If you feel ready to give a final answer, set to "final_answer".
+	"next_action": str,  // If you feel you need more time to think, set to "continue_thinking". If you feel ready to give a final answer, set to "final_answer".
 }}
+```
 
 Note: For more complex questions or anything that necessitates deeper thought, you can chain thought sequences simply by setting 'next_action' to 'continue'.
 
@@ -267,14 +270,14 @@ THOUGHT_SCHEMA = {
 		"emotion_influence": {"type":"string"},
 		"next_action": {
 			"enum": [
-				"continue",
+				"continue_thinking",
 				"final_answer"
 			]
 		}
 	},
 	"required": [
-		"possible_user_emotions",
 		"thoughts",
+		"possible_user_emotions",
 		"emotion_reason",
 		"emotion",
 		"emotion_intensity",

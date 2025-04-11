@@ -1,5 +1,6 @@
 import os
 import requests
+import json
 import json_repair
 import time
 from dotenv import load_dotenv
@@ -94,23 +95,32 @@ class MistralLLM:
 	def __init__(self, model="mistral-large-latest"):
 		self.model = model
 
+	def _parse_json(self, response):
+		try:
+			return json.loads(response, strict=True)
+		except json.JSONDecodeError:
+			pass
+		
+		try:
+			return json.loads(response, strict=False)
+		except json.JSONDecodeError:
+			return json_repair.loads(response, skip_json_loads=True)
+	
 	def generate(
 		self,
 		prompt,
 		return_json=False,
 		schema=None,
+		n=None,
 		**kwargs
 	):
-		"""Generates a completion from the model given a prompt"""
 		if schema and not return_json:
 			raise ValueError("return_json must be True if schema is provided")
 		if isinstance(prompt, str):
 			prompt = [{"role":"user", "content":prompt}]
-		if self.model not in ["mistral-small-latest", "mistral-large-latest"]:
-			prompt = _convert_system_to_user(prompt)
-
+		
 		if schema:
-			response_format = {
+			format = {
 				"type":"json_schema",
 				"json_schema":{
 					"name": "json_format",
@@ -119,17 +129,24 @@ class MistralLLM:
 				}
 			}
 		else:
-			response_format = {"type":"json_object"} if return_json else {"type":"text"}
+			format = {"type":"json_object"} if return_json else {"type":"text"} 
 		response = mistral_request(
 			prompt,
 			**kwargs,
+			n=(n or 1),
 			model=self.model,
-			response_format=response_format
+			response_format=format
 		)
-
-		response = response["choices"][0]["message"]["content"]
-
-		if return_json:
-			return json_repair.loads(response)
-
+		
+		if n:
+			response = [r["message"]["content"] for r in response["choices"]]
+			if return_json:
+				return [self._parse_json(r) for r in response]			
+		else:
+			response = response["choices"][0]["message"]["content"]
+		
+			if return_json:
+				return self._parse_json(response)
+			
 		return response
+			

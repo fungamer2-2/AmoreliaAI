@@ -166,12 +166,19 @@ class ThoughtSystem:
 		]
 		model = get_model_to_use(messages)
 		
-		data = model.generate(
-			thought_history,
-			temperature=0.8,
-			return_json=True,
-			schema=THOUGHT_SCHEMA
-		)
+		data = {}
+		for _ in range(3):
+			data = model.generate(
+				thought_history,
+				temperature=0.8,
+				return_json=True,
+				schema=THOUGHT_SCHEMA
+			)
+			if data.get("thoughts", []):
+				break
+			else:
+				print(data)
+				print("Retrying...")
 
 		data = self._check_and_fix_thought_output(data)
 		thought_history.append({
@@ -187,7 +194,7 @@ class ThoughtSystem:
 	
 		thoughts_query = " ".join(data["thoughts"])
 		num_steps = 0
-		while data["next_action"].lower() == "continue":
+		while data["next_action"].lower() == "continue_thinking":
 			num_steps += 1
 			added_context = ""
 			relevant_memories = self.memory_system.long_term.retrieve(thoughts_query, MEMORY_RETRIEVAL_TOP_K)
