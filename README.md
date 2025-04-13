@@ -1,10 +1,11 @@
-# HumanlikeAI
+# 💖 HumanlikeAI
 
 ![GitHub commit activity](https://img.shields.io/github/commit-activity/m/fungamer2-2/HumanlikeAI)
 ![GitHub last commit](https://img.shields.io/github/last-commit/fungamer2-2/HumanlikeAI)
 ![GitHub License](https://img.shields.io/github/license/fungamer2-2/HumanlikeAI)
 
-An AI companion designed for more humanlike interactions. The goal is to create a humanlike AI system that isn't just an assistant, but a virtual companion that you can form connections with.
+
+A humanlike AI companion whose goal is not simply to assist, but to truly form connections with users on a deeper level. 💖
 
 Currently uses [Mistral AI](https://mistral.ai) models. To use this project, you'll need a Mistral AI API key, and store it under `MISTRAL_API_KEY` in a `.env` file.
 
@@ -17,19 +18,19 @@ Currently uses [Mistral AI](https://mistral.ai) models. To use this project, you
 
 If you find a bug or have a feature request, feel free to [open an issue](https://github.com/fungamer2-2/HumanlikeAI/issues/new/choose).
 
-## Thought system
+## 💭 Thought system
 
 Before responding, the AI is prompted to generate a list of thoughts from its perspective. These thoughts are treated as the AI's "inner monologue." This helps make it a bit more realistic, and think as if it truly had its own personality.
 
 Periodically, the AI will reflect and gather insights to add to its memory, in order to gain a higher-level understanding of the user.
 
-## Emotion system
+## 😊 Emotion system
 
 The emotion system is based on the PAD (Pleasure-Arousal-Dominance) state model. Interactions with the AI will elicit emotions, which affect its mood. Its current emotions may affect its responses.
 
 The AI's mood is updated based on its emotions it experiences in the conversation. If no emotions have been invoked recently, its mood will gradually return to its baseline mood.
 
-## Memory system
+## 📝 Memory system
 
 The AI companion also has a long-term memory system to recall relevant memories and insights from previous conversations. It includes two types of memory: short-term and long-term.
 
