@@ -287,8 +287,6 @@ THOUGHT_SCHEMA = {
 	"additionalProperties": False
 }
 
-
-
 HIGHER_ORDER_THOUGHTS = """You've decided that further thinking is needed before responding. Given your previous thoughts and the previous context, generate a set of higher-order thoughts.
 Use the same JSON format as before. Remember to start with the `thoughts` field, but you can either edit or keep the other fields the same, based on your higher-order thoughts.
 These higher-order thoughts will enable metacognition and self-reflection.
@@ -303,7 +301,7 @@ Each trait value ranges from -1.0 to +1.0, where +0.0 is neutral/in the middle.
 
 {personality_values}
 
-Concise Personality Summary Paragraph:"""
+Respond in one concise paragraph."""
 
 REFLECT_GEN_TOPICS = """# Recent Memories
 

@@ -176,9 +176,7 @@ class ThoughtSystem:
 			)
 			if data.get("thoughts", []):
 				break
-			else:
-				print(data)
-				print("Retrying...")
+			
 
 		data = self._check_and_fix_thought_output(data)
 		thought_history.append({
