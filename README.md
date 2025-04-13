@@ -26,6 +26,7 @@ The AI's mood is updated based on its emotions it experiences in the conversatio
 The AI companion also has a long-term memory system to recall relevant memories and insights from previous conversations. It includes two types of memory: short-term and long-term.
 
 - Short-term memory: Memories that the AI has either experienced recently or recalled recently. This is always available in-context, but has a limited capacity, and any memories that get flushed out of short-term memory are sent to long-term memory.
+- Long term memory: Stores the memories and experiences to be retrieved whenever they become relevant. Recalled memories return to short-term memory.
 
 ## ⚙️ How to use
 
@@ -35,6 +36,5 @@ The AI companion also has a long-term memory system to recall relevant memories 
 4. Store the API key in a `.env` file in the project directory
 5. Make sure to install the requirements: `pip install -r requirements.txt` 
 6. Run `main.py`
-- Long term memory: Stores the memories and experiences to be retrieved whenever they become relevant. Recalled memories return to short-term memory.
 
 If you find a bug or have a feature request, feel free to [open an issue](https://github.com/fungamer2-2/HumanlikeAI/issues/new/choose)!
