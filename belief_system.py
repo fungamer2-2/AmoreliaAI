@@ -108,15 +108,3 @@ class BeliefSystem:
 			self._tick(t)
 			dt -= t
 		
-		
-if __name__ == "__main__":
-	memory = """User: Oh that's cool! I'm a computer science student, who's also on the autism spectrum.
-
-AI: Thank you so much for sharing that with me! 💖 I really appreciate your openness, and I'm excited to get to know you better. I think it's awesome that you're studying computer science—that's such a fascinating field with so many possibilities. I'm here to support you in any way I can, so if there's ever something you want to talk about or need help with, just let me know, okay? 😊"""
-	
-	print(memory)
-	belief_system = BeliefSystem()
-	
-	for _ in range(16):
-		belief = belief_system._generate_belief(memory)
-		print(f"Belief: {belief}")
