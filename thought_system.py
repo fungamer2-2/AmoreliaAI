@@ -62,7 +62,7 @@ class ThoughtSystem:
 		for question in questions:
 			print(f"Reflecting on '{question}'")
 			relevant_memories = (
-				self.memory_system.get_memories()
+				self.memory_system.get_short_term_memories()
 				+ self.memory_system.retrieve_long_term(question, 12)
 			)
 			memories_str = "\n".join(mem.format_memory() for mem in relevant_memories)

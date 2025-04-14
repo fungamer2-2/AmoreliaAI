@@ -239,6 +239,11 @@ class AISystem:
 			user_emotion_str = "The user doesn't appear to show any strong emotion."
 
 		thought_str = "\n".join("- " + thought for thought in thought_data["thoughts"])
+		beliefs = self.memory_system.get_beliefs()
+		if beliefs:
+			belief_str = "\n".join(f"- {belief}" for belief in beliefs)
+		else:
+			belief_str = "None"
 		return {
 			"name": self.config.name,
 			"personality_summary": self.personality_system.get_summary(),
@@ -253,7 +258,8 @@ class AISystem:
 			),
 			"curr_date": now.strftime("%a, %-m/%-d/%Y"),
 			"curr_time": now.strftime("%-I:%M %p"),
-			"user_emotion_str": user_emotion_str
+			"user_emotion_str": user_emotion_str,
+			"beliefs": belief_str
 		}
 
 	def send_message(self, user_input: str, attached_image=None, return_json=False):
@@ -337,6 +343,10 @@ class AISystem:
 	def get_mood(self):
 		"""Gets the AI's current mood."""
 		return self.emotion_system.mood
+		
+	def get_beliefs(self):
+		"""Gets the AI's beliefs"""
+		return self.memory_system.get_beliefs()
 
 	def set_mood(self, pleasure=None, arousal=None, dominance=None):
 		"""Sets the AI's current mood. All parameters are optional, but if none are specified, 
@@ -537,7 +547,17 @@ def main():
 						input("The AI has been reset. Press enter to continue.")
 						clear_screen()
 						ai = AISystem()
-						ai.on_startup()	
+						ai.on_startup()
+			elif command in "beliefs":
+				beliefs = ai.get_beliefs()
+				if beliefs:
+					print("The following beliefs have been formed:")
+					for belief in beliefs:
+						print("- " + belief)
+				else:
+					print("No beliefs have been formed yet")
+			else:
+				print(f"Invalid command '/{command}'")
 			continue
 	
 		print()
