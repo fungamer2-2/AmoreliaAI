@@ -1,3 +1,5 @@
+"""The system that manages the beliefs of the AI."""
+
 from llm import MistralLLM
 
 BELIEF_SYSTEM_PROMPT = """Generate a belief that would arise, given the memory.
@@ -45,15 +47,17 @@ Memory:
 Belief: """
 
 class BeliefSystem:
+	"""The system that manages the AI's beliefs"""
 	model = MistralLLM("mistral-small-latest")
 	max_beliefs = 12
-	
+
 	def __init__(self):
 		self.beliefs = []
-		
+
 	def get_beliefs(self):
+		"""Returns a list of the AI's current beliefs"""
 		return [belief["content"] for belief in self.beliefs]
-	
+
 	def _generate_belief(self, memory):
 		schema = {
 			"type": "object",
@@ -66,8 +70,13 @@ class BeliefSystem:
 		}
 		prompt = BELIEF_SYSTEM_PROMPT.format(memory=memory)
 		messages = [
-			{"role":"system", "content":"You are a belief generator that generates a natural belief sentence in first-person POV given a memory, from the AI's perspective. Generate a belief sentence, and assign an importance score from 0.0 (trivial) to 1.0 (very important)."},
-			{"role":"user", "content":prompt}
+			{
+				"role": "system",
+				"content": "You are a belief generator that generates a natural belief sentence " \
+					"in first-person POV given a memory, from the AI's perspective. Generate a belief sentence, " \
+					"and assign an importance score from 0.0 (trivial) to 1.0 (very important)."
+			},
+			{"role": "user", "content":prompt}
 		]
 		belief = self.model.generate(
 			messages,
@@ -76,35 +85,37 @@ class BeliefSystem:
 			return_json=True
 		)
 		return belief
-		
+
 	def _has_belief(self, belief):
 		return any(b["content"] == belief["content"] for b in self.beliefs)
-		
+
 	def _add_belief(self, belief):
 		self.beliefs.append(belief)
 		self.beliefs.sort(key=lambda b: b["importance"], reverse=True)
 		if len(self.beliefs) > self.max_beliefs:  # Keep most important beliefs
 			self.beliefs = self.beliefs[:self.max_beliefs]
-		
+
 	def generate_new_belief(self, memory):
+		"""Generates a new belief given a memory."""
 		for _ in range(4):
 			belief = self._generate_belief(memory)
 			if not self._has_belief(belief):
 				print(f"New belief: {belief}")
 				self._add_belief(belief)
 				break
-				
+
 	def _tick(self, dt):
 		for belief in self.beliefs:
 			# Important memories decay slower
-			half_life = 20 * (1 + belief["importance"]**2 * 3)
-			decay_factor = 0.5 ** (dt / half_life)	
+			half_life = 20 * 86400 * (1 + belief["importance"]**2 * 3)
+			decay_factor = 0.5 ** (dt / half_life)
 			belief["importance"] *= decay_factor
-			
-	def tick(self, dt):
-		subtick = max(1, min(dt / 10, 10000))
-		while dt > 0:
-			t = min(dt, subtick)
-			self._tick(t)
-			dt -= t
+
+	def tick(self, delta):
+		"""Ticks the belief system"""
+		subtick = max(1, min(delta / 10, 10000))
+		while delta > 0:
+			subt = min(delta, subtick)
+			self._tick(subt)
+			delta -= subt
 		

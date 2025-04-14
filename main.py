@@ -1,5 +1,6 @@
 """The main module that runs the AI."""
 
+import copy
 import os
 import traceback
 import json
@@ -541,7 +542,6 @@ def main():
 	
 		print()
 		
-		import copy
 		backup_ai = copy.deepcopy(ai)
 		try:
 			message = ai.send_message(msg, attached_image=attached_image)
