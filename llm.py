@@ -26,7 +26,7 @@ def mistral_request(messages, model, **kwargs):
 	}
 	max_delay = 20
 	for tries in range(6):
-		response = requests.post(MISTRAL_API_CHAT_URL, json=data, headers=headers, timeout=30)
+		response = requests.post(MISTRAL_API_CHAT_URL, json=data, headers=headers, timeout=120)
 		if response.ok:
 			break
 		elif response.status_code == 429:

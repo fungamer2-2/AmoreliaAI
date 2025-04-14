@@ -81,7 +81,7 @@ class ThoughtSystem:
 			)["insights"]
 			print("Insights gained:")
 			for insight in insights:
-				self.memory_system.remember(f"I gained an insight after reflection: {insight}")
+				self.memory_system.remember(f"I gained an insight after reflection: {insight}", is_insight=True)
 				print("- " + insight)
 		self.memory_system.reset_importance()
 		self.last_reflection = datetime.now()
@@ -139,6 +139,11 @@ class ThoughtSystem:
 		else:
 			text_content = content
 	
+		beliefs = self.memory_system.get_beliefs()
+		if beliefs:
+			belief_str = "\n".join(f"- {belief}" for belief in beliefs)
+		else:
+			belief_str = "None"
 		prompt = THOUGHT_PROMPT.format(
 			name=self.config.name,
 			user_input=text_content,
@@ -148,7 +153,8 @@ class ThoughtSystem:
 			curr_time=datetime.now().strftime("%-I:%M %p"),
 			mood_prompt=self.emotion_system.get_mood_prompt(),
 			memories=memories_str,
-			relationship_str=self.relation_system.get_string()
+			relationship_str=self.relation_system.get_string(),
+			beliefs=belief_str
 		)
 		prompt_content = prompt
 		if img_data:
@@ -176,7 +182,6 @@ class ThoughtSystem:
 			)
 			if data.get("thoughts", []):
 				break
-			
 
 		data = self._check_and_fix_thought_output(data)
 		thought_history.append({

@@ -9,6 +9,7 @@ PERSONALITY_INTENSITY_FACTOR = 0.3
 LSH_VEC_DIM = 1024
 LSH_NUM_BITS = 2
 MEMORY_DECAY_TIME_MULT = 1.75
+MEMORY_RECENCY_FORGET_THRESHOLD = 0.7
 MAX_THOUGHT_STEPS = 5
 MEMORY_RETRIEVAL_TOP_K = 3
 SAVE_PATH = "ai_system_save.pkl"
@@ -202,6 +203,11 @@ User: {user_input}
 
 Current date: {curr_date}
 Current time: {curr_time}
+
+# Beliefs
+
+{name}'s current beliefs:
+{beliefs}
 
 # Instructions
 

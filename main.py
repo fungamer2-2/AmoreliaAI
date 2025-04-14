@@ -541,9 +541,12 @@ def main():
 	
 		print()
 		
+		import copy
+		backup_ai = copy.deepcopy(ai)
 		try:
 			message = ai.send_message(msg, attached_image=attached_image)
 		except Exception as e:  # pylint: disable=W0718,C0103
+			ai = backup_ai  # Restore in case something changed before the error
 			traceback.print_exception(type(e), e, e.__traceback__)
 			print("An error occurred. Please try again in a moment.")
 			print("If the issue persists, please open an issue on GitHub: https://github.com/fungamer2-2/HumanlikeAI/issues/new?template=bug_report.md")

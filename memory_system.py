@@ -15,6 +15,7 @@ from utils import (
 	conversation_to_string
 )
 from emotion_system import Emotion
+from belief_system import BeliefSystem
 
 
 IMPORTANCE_PROMPT = """Your task is to rate the importance of the given memory from 1 to 10.
@@ -378,19 +379,26 @@ class MemorySystem:
 		self.short_term = ShortTermMemory()
 		self.long_term = LongTermMemory()
 		self.last_memory = datetime.now()
+		self.belief_system = BeliefSystem()
 		self.importance_counter = 0.0
+		
+	def get_beliefs(self):
+		return self.belief_system.get_beliefs()
 	
 	def reset_importance(self):
 		"""Resets the importance counter"""
 		self.importance_counter = 0.0
 	
-	def remember(self, content, emotion=None):
+	def remember(self, content, emotion=None, is_insight=False):
 		"""Adds a new memory"""
 		importance = get_importance(content)
 		strength = 1 + (importance - 1) / 2
 		self.last_memory = datetime.now()
 		self.short_term.add_memory(Memory(content, strength=strength, emotion=emotion))
 		self.importance_counter += importance / 10
+		#print(f"Importance: {importance}")
+		if not is_insight and importance >= 5:  # Important memories will create new beliefs
+			self.belief_system.generate_new_belief(content)
 
 	def recall(self, query):
 		"""Recalls and returns the most relevant memories"""
@@ -414,6 +422,7 @@ class MemorySystem:
 			self.last_memory = now
 		
 		self.long_term.tick(dt)
+		self.belief_system.tick(dt)
 		
 	def consolidate_memories(self):
 		"""Consilidates all short-term memories into long-term"""
