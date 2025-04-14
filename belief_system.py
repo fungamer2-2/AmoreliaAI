@@ -90,18 +90,23 @@ class BeliefSystem:
 		return any(b["content"] == belief["content"] for b in self.beliefs)
 
 	def _add_belief(self, belief):
+		if len(self.beliefs) >= self.max_beliefs:
+			min_importance = min(self.beliefs, key=lambda b: b["importance"])
+			if belief["importance"] < min_importance:
+				return False
+			
 		self.beliefs.append(belief)
 		self.beliefs.sort(key=lambda b: b["importance"], reverse=True)
 		if len(self.beliefs) > self.max_beliefs:  # Keep most important beliefs
 			self.beliefs = self.beliefs[:self.max_beliefs]
+		return True
 
 	def generate_new_belief(self, memory):
 		"""Generates a new belief given a memory."""
 		for _ in range(4):
 			belief = self._generate_belief(memory)
-			if not self._has_belief(belief):
+			if not self._has_belief(belief) and self._add_belief(belief):
 				print(f"New belief: {belief}")
-				self._add_belief(belief)
 				break
 
 	def _tick(self, dt):
