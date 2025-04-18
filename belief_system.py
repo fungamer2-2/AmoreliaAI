@@ -75,7 +75,7 @@ class BeliefSystem:
 			{
 				"role": "system",
 				"content": "You are a belief generator that generates a natural belief sentence " \
-					"in first-person POV given a memory, from {name}'s perspective. Generate a belief sentence, " \
+					f"in first-person POV given a memory, from {name}'s perspective. Generate a belief sentence, " \
 					"and assign an importance score from 0.0 (trivial) to 1.0 (very important)."
 			},
 			{"role": "user", "content":prompt}
