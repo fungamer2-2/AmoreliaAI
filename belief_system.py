@@ -3,7 +3,7 @@
 from llm import MistralLLM
 
 BELIEF_SYSTEM_PROMPT = """Generate a belief that would arise, given the memory.
-The belief should be a sentence written from the AI's perspective.
+The belief should be a sentence written from {name}'s perspective.
 
 ## Examples:
 
@@ -51,14 +51,16 @@ class BeliefSystem:
 	model = MistralLLM("mistral-small-latest")
 	max_beliefs = 12
 
-	def __init__(self):
+	def __init__(self, config):
+		self.config = config
 		self.beliefs = []
 
 	def get_beliefs(self):
 		"""Returns a list of the AI's current beliefs"""
 		return [belief["content"] for belief in self.beliefs]
 
-	def _generate_belief(self, memory):
+	def _generate_belief(self, memory, importance):
+		name = self.config.name
 		schema = {
 			"type": "object",
 			"properties": {
@@ -68,12 +70,12 @@ class BeliefSystem:
 			"required": ["content", "importance"],
 			"additionalProperties": False
 		}
-		prompt = BELIEF_SYSTEM_PROMPT.format(memory=memory)
+		prompt = BELIEF_SYSTEM_PROMPT.format(memory=memory, name=name)
 		messages = [
 			{
 				"role": "system",
 				"content": "You are a belief generator that generates a natural belief sentence " \
-					"in first-person POV given a memory, from the AI's perspective. Generate a belief sentence, " \
+					"in first-person POV given a memory, from {name}'s perspective. Generate a belief sentence, " \
 					"and assign an importance score from 0.0 (trivial) to 1.0 (very important)."
 			},
 			{"role": "user", "content":prompt}
@@ -84,6 +86,7 @@ class BeliefSystem:
 			schema=schema,
 			return_json=True
 		)
+		belief["importance"] = (belief["importance"] + importance) / 2
 		return belief
 
 	def _has_belief(self, belief):
@@ -91,9 +94,9 @@ class BeliefSystem:
 
 	def _add_belief(self, belief):
 		if len(self.beliefs) >= self.max_beliefs:
-			min_importance = min(self.beliefs, key=lambda b: b["importance"])
+			min_importance = min(b["importance"] for b in self.beliefs)
 			if belief["importance"] < min_importance:
-				return False
+				return None
 			
 		self.beliefs.append(belief)
 		self.beliefs.sort(key=lambda b: b["importance"], reverse=True)
@@ -101,12 +104,15 @@ class BeliefSystem:
 			self.beliefs = self.beliefs[:self.max_beliefs]
 		return True
 
-	def generate_new_belief(self, memory):
+	def generate_new_belief(self, memory, importance):
 		"""Generates a new belief given a memory."""
 		for _ in range(4):
-			belief = self._generate_belief(memory)
-			if not self._has_belief(belief) and self._add_belief(belief):
-				print(f"New belief: {belief}")
+			belief = self._generate_belief(memory, importance)
+			if not self._has_belief(belief):
+				new_belief = self._add_belief(belief)
+				if new_belief:
+					new_belief = belief
+					print(f"New belief: {belief}")
 				break
 
 	def _tick(self, dt):

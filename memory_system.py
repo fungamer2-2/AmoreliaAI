@@ -379,7 +379,7 @@ class MemorySystem:
 		self.short_term = ShortTermMemory()
 		self.long_term = LongTermMemory()
 		self.last_memory = datetime.now()
-		self.belief_system = BeliefSystem()
+		self.belief_system = BeliefSystem(config)
 		self.importance_counter = 0.0
 		
 	def get_beliefs(self):
@@ -398,7 +398,7 @@ class MemorySystem:
 		self.importance_counter += importance / 10
 		#print(f"Importance: {importance}")
 		if not is_insight and importance >= 5:  # Important memories will create new beliefs
-			self.belief_system.generate_new_belief(content)
+			self.belief_system.generate_new_belief(content, importance/10)
 
 	def recall(self, query):
 		"""Recalls and returns the most relevant memories"""

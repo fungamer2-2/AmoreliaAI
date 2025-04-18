@@ -70,6 +70,7 @@ class MessageBuffer:
 GENERATE_USER_RESPONSES_PROMPT = """# Task
 
 Given the following conversation, please suggest 3 to 5 possible responses that the HUMAN could respond to the last AI message given the conversation context.
+Try to match the human's tone and style as closely as possible. 
 
 # Role descriptions
 
@@ -130,7 +131,7 @@ class PersonalityConfig(BaseModel):
 
 class AIConfig(BaseModel):
 	"""The config for the AI"""
-	name: str = Field(default="AI")
+	name: str = Field(default="Amorelia")
 	system_prompt: str = Field(
 		default=AI_SYSTEM_PROMPT
 	)
@@ -180,6 +181,20 @@ class AISystem:
 
 		self.buffer = MessageBuffer(20)
 		self.buffer.set_system_prompt(config.system_prompt)
+		
+	def set_config(self, config):
+		"""Updates the config"""
+		self.memory_system.config = config
+		self.memory_system.belief_system.config = config
+		self.thought_system.config = config
+		personality = config.personality
+		self.personality_system = PersonalitySystem(
+			openness=personality.open,
+			conscientious=personality.conscientious,
+			extrovert=personality.extrovert,
+			agreeable=personality.agreeable,
+			neurotic=personality.neurotic
+		)
 
 	def get_message_history(self, include_system_prompt=True):
 		"""Gets the current conversation history."""
@@ -203,8 +218,8 @@ class AISystem:
 					},
 					{
 						"type": "text",
-						"text": "Please describe in detail what you see in this image. \
-							Make sure to include specific details, such as style, colors, etc."
+						"text": "Please describe in detail what you see in this image. " \
+							"Make sure to include specific details, such as style, colors, etc."
 					}
 				]
 			}
@@ -224,7 +239,7 @@ class AISystem:
 
 		user_msg += user_input
 
-		return f"User: {user_msg}\n\nAI: {ai_response}"
+		return f"User: {user_msg}\n\n{self.config.name}: {ai_response}"
 		
 	def _get_format_data(self, content, thought_data, memories):
 		now = datetime.now()
@@ -548,7 +563,7 @@ def main():
 						clear_screen()
 						ai = AISystem()
 						ai.on_startup()
-			elif command in "beliefs":
+			elif command == "beliefs":
 				beliefs = ai.get_beliefs()
 				if beliefs:
 					print("The following beliefs have been formed:")
@@ -556,6 +571,11 @@ def main():
 						print("- " + belief)
 				else:
 					print("No beliefs have been formed yet")
+			elif command == "configupdate":
+				new_config = AIConfig()
+				ai.set_config(new_config)
+				ai.save(SAVE_PATH)
+				print("Config updated and saved!")
 			else:
 				print(f"Invalid command '/{command}'")
 			continue
