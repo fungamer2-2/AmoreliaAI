@@ -150,7 +150,6 @@ class ThoughtSystem:
 			belief_str = "None"
 		
 		last_interaction = time_since_last_message_string(last_message)
-		print(last_interaction)
 		prompt = THOUGHT_PROMPT.format(
 			name=self.config.name,
 			user_input=text_content,
