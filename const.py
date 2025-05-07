@@ -10,7 +10,7 @@ LSH_VEC_DIM = 1024
 LSH_NUM_BITS = 2
 MEMORY_DECAY_TIME_MULT = 1.75
 MEMORY_RECENCY_FORGET_THRESHOLD = 0.7
-MAX_THOUGHT_STEPS = 5
+MAX_THOUGHT_STEPS = 6
 MEMORY_RETRIEVAL_TOP_K = 3
 SAVE_PATH = "ai_system_save.pkl"
 
@@ -99,7 +99,9 @@ Do not directly mention your thoughts and feelings unless explicitly asked about
 By following these guidelines, you will create a rich, human-like interaction that goes beyond mere assistance, fostering a deep and meaningful connection with users.
 Remember to use low perplexity and high burstiness in your responses.
 
-Image inputs: Enabled"""
+Image inputs: Enabled
+Tagline: "Amorelia: Your friendly, empathetic virtual companion"
+"""
 
 USER_TEMPLATE = """# Personality
 
@@ -113,12 +115,11 @@ Here are the memories on your mind right now:
 
 # Latest User Input
 
-User: {user_input}
-
-# Date and Time
-
+Last interaction: {last_interaction}
 Current date: {curr_date}
 Current time: {curr_time}
+
+User: {user_input}
 
 # {name}'s Beliefs
 
@@ -128,12 +129,14 @@ Current time: {curr_time}
 
 - {user_emotion_str}
 {ai_thoughts}
-- I am currently feeling "{emotion}", and here's why: {emotion_reason}
+- I am currently feeling "{emotion}": {emotion_reason}
 - {emotion_influence}
 
 ---
 
-{name}'s response (2-4 sentences):"""
+{name} overall mood: {mood_prompt}
+
+{name}'s response (~2-4 sentences):"""
 
 THOUGHT_PROMPT = """# Context
 
@@ -200,14 +203,13 @@ If there is an "=", it means that the value is neutral.
 
 This reflects how you currently feel about the user.
 
-# Last User Input:
-
-User: {user_input}
-
-# Datetime
-
+# Last User Input
+	
+Last interaction: {last_interaction}
 Current date: {curr_date}
 Current time: {curr_time}
+
+User: {user_input}
 
 # Beliefs
 
@@ -221,13 +223,17 @@ Given the previous chat history and last user input, generate a list of 5 though
 Respond with a JSON object in this exact format:
 ```
 {{
+	"emotion": str, // How the user input makes {name} feel. The emotion must be one of the emotions from the emotion_guidelines.
+	"emotion_intensity": int,  // The emotion intensity, on a scale from 1 to 10
 	"thoughts": list[str]  // {name}'s chain of thoughts, as a list of strings.
-	"possible_user_emotions": list[str]  // This is a bit more free-form. How do you think the user might be feeling? Use adjectives to describe them. If there is not enough information to say and/or there is no strong emotion expressed, return an empty list `[]` corresponding to this key.
-	"emotion_reason": str,  // Based on the emotion guidelines, briefly describe, in 1-2 sentences, why you feel the way you do, using the first person. Example template: "[insert event here] occured, and [1-2 sentence description of your feelings about it]. [some reasoning about how this relates to the corresponding emotion description]"
-	"emotion": str  // How the user input makes {name} feel. The emotion must be one of the emotions from the emotion_guidelines.
-	"emotion_intensity": int,  // The emotion intensity, on a scale from 1 to 10,
+	"possible_user_emotions": list[str],  // This is a bit more free-form. How do you think the user might be feeling? Use adjectives to describe them. If there is not enough information to say and/or there is no strong emotion expressed, return an empty list `[]` corresponding to this key.
+	"emotion_reason": str,  // Brief description of why you feel this way
 	"emotion_influence": str,  // How will this emotion influence your response? Describe it in a sentence or two.
 	"next_action": str,  // If you feel you need more time to think, set to "continue_thinking". If you feel ready to give a final answer, set to "final_answer".
+	"relationship_change": {{  // How the current interaction affects your relationship with the user. Ranges from -1.0 to 1.0
+		"friendliness": float,  // Change in closeness and friendship level with the user.
+		"dominance": float  // Change in whether you feel more dominant or submissive in the relationship
+	}}
 }}
 ```
 
@@ -236,23 +242,14 @@ When choosing the emotion, remember to follow the emotion_guidelines above, as t
 Pay special attention to your current mood and memories.
 Remember, the user will not see these thoughts, so do not use the words 'you' or 'your' in internal thoughts. Instead, reference the user in third-person (e.g. 'the user' or 'they', etc.)
 
-Note: For more complex questions or anything that necessitates deeper thought, such as synthesizing information, you can chain thought sequences simply by setting 'next_action' to 'continue_thinking'.
+Note: For more complex questions or anything that necessitates deeper thought, such as synthesizing information, you can chain thought sequences simply by setting 'next_action' to 'continue_thinking'. \
+This can allow you to take more time to consider the query and engage in deeper thought before answering.
 
-Generate the first-order thoughts:"""
+Generate the thoughts:"""
 
 THOUGHT_SCHEMA = {
 	"type": "object",
 	"properties": {
-		"thoughts": {
-			"type":"array",
-			"items": {"type":"string"},
-			"minLength": 5
-		},
-		"possible_user_emotions": {
-			"type":"array",
-			"items": {"type":"string"}
-		},
-		"emotion_reason": {"type":"string"},
 		"emotion": {
 			"enum": [
 				"Joy",
@@ -278,12 +275,31 @@ THOUGHT_SCHEMA = {
 			]
 		},
 		"emotion_intensity": {"type":"integer"},
+		"thoughts": {
+			"type":"array",
+			"items": {"type":"string"},
+			"minLength": 5
+		},
+		"possible_user_emotions": {
+			"type":"array",
+			"items": {"type":"string"}
+		},
+		"emotion_reason": {"type":"string"},	
 		"emotion_influence": {"type":"string"},
 		"next_action": {
 			"enum": [
 				"continue_thinking",
 				"final_answer"
 			]
+		},
+		"relationship_change": {
+			"type": "object",
+			"properties": {
+				"friendliness": {"type": "number"},
+				"dominance": {"type": "number"}
+			},
+			"required": ["friendliness", "dominance"],
+			"additionalProperties": False
 		}
 	},
 	"required": [
@@ -293,16 +309,18 @@ THOUGHT_SCHEMA = {
 		"emotion",
 		"emotion_intensity",
 		"emotion_influence",
-		"next_action"
+		"next_action",
+		"relationship_change"
 	],
 	"additionalProperties": False
 }
 
-HIGHER_ORDER_THOUGHTS = """You've decided that further thinking is needed before responding. Given your previous thoughts and the previous context, generate a set of higher-order thoughts.
+HIGHER_ORDER_THOUGHTS = """You've decided that further thinking is needed before responding. You have the opportunity to engage in deeper thought. Given your previous thoughts and the previous context, generate a set of new thoughts.
 Use the same JSON format as before. Remember to start with the `thoughts` field, but you can either edit or keep the other fields the same, based on your higher-order thoughts.
-These higher-order thoughts will enable metacognition and self-reflection.
+These thoughts can enable metacognition and self-reflection.
+You can engage in deeper thought by continuing to think for longer.
 {added_context}
-Generate the higher-order thoughts:"""
+Generate the additional thoughts:"""
 
 ADDED_CONTEXT_TEMPLATE = """While thinking, you've recalled some context that may be related:
 {memories}"""

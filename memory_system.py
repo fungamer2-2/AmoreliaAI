@@ -242,7 +242,7 @@ class LSHMemory:
 			sample = random.sample(bucket, sample_size)
 			recalled.extend(sample)
 			weights.extend([mem.get_recency_factor() for mem in sample])
-
+	
 		if len(recalled) > 5:
 			new_recalled = []
 			for _ in range(5):

@@ -15,7 +15,8 @@ from utils import (
 	clear_screen,
 	get_model_to_use,
 	is_image_url,
-	format_memories_to_string
+	format_memories_to_string,
+	time_since_last_message_string
 )
 from emotion_system import (
 	EmotionSystem,
@@ -88,14 +89,19 @@ Respond in JSON format:
 
 # Conversation History
 
+Today is {date}. The current time is {time}
+
 Here is the conversation history so far:
 
 ```
 {conversation_history}
 ```
 
+Remember, try to match the human's tone and style as closely as possible. 
+
 Possible **HUMAN** responses:"""
 	
+from datetime import datetime
 def suggest_responses(conversation):
 	"""Generates a list of potential user responses given the conversation history."""
 	role_map = {
@@ -107,9 +113,12 @@ def suggest_responses(conversation):
 		for msg in conversation
 		if msg["role"] != "system"
 	)
+	now = datetime.now()
 	model = MistralLLM("mistral-small-latest")
 	prompt = GENERATE_USER_RESPONSES_PROMPT.format(
-		conversation_history=history_str
+		conversation_history=history_str,
+		date=now.strftime("%a, %-m/%-d/%Y"),
+		time=now.strftime("%-I:%M %p")
 	)
 
 	data = model.generate(
@@ -167,6 +176,7 @@ class AISystem:
 			self.personality_system,
 			self.relation_system
 		)
+		
 		self.thought_system = ThoughtSystem(
 			config,
 			self.emotion_system,
@@ -175,7 +185,8 @@ class AISystem:
 			self.personality_system
 		)
 
-		self.last_message = datetime.now()
+		self.num_messages = 0
+		self.last_message = None
 		self.last_recall_tick = datetime.now()
 		self.last_tick = datetime.now()
 
@@ -274,13 +285,15 @@ class AISystem:
 			"curr_date": now.strftime("%a, %-m/%-d/%Y"),
 			"curr_time": now.strftime("%-I:%M %p"),
 			"user_emotion_str": user_emotion_str,
-			"beliefs": belief_str
+			"beliefs": belief_str,
+			"mood_prompt": self.emotion_system.get_mood_prompt(),
+			"last_interaction": time_since_last_message_string(self.last_message)
 		}
 
 	def send_message(self, user_input: str, attached_image=None, return_json=False):
 		"""Sends a message to the AI, and returns the response."""
 		self.tick()
-		self.last_message = datetime.now()
+		
 		self.last_recall_tick = datetime.now()
 		self.buffer.set_system_prompt(self.config.system_prompt)
 
@@ -306,7 +319,8 @@ class AISystem:
 		thought_data = self.thought_system.think(
 			self.get_message_history(False),
 			memories,
-			recalled_memories
+			recalled_memories,
+			self.last_message
 		)
 
 		content = history[-1]["content"]
@@ -344,6 +358,7 @@ class AISystem:
 			self._input_to_memory(user_input, response, attached_image),
 			emotion=thought_data["emotion_obj"]
 		)
+		self.last_message = datetime.now()
 		self.tick()
 		new_response = response
 		if return_json:
@@ -475,6 +490,9 @@ def command_parse(string):
 		command, remaining = string, ""
 	args = remaining.split()
 	return command, _parse_args(args)
+	
+
+# TODO: Add a user profile system
 
 
 def main():
@@ -490,6 +508,7 @@ def main():
 			print(f"Attached image: {attached_image}")
 		msg = input("User: ").strip()
 		if not msg:
+			ai.save(SAVE_PATH)	
 			continue
 			
 		if msg.startswith("/"):

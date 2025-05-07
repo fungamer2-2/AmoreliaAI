@@ -1,6 +1,8 @@
 #pylint:disable=C0114
 import re
 import os
+import time
+from datetime import datetime
 
 import requests
 
@@ -163,3 +165,26 @@ def is_image_url(url):
 		)
 	except requests.RequestException:
 		return False
+
+def time_since_last_message_string(timestamp):
+	if not timestamp:
+		return "never (this is the first interaction)"
+	delta_time = int((datetime.now() - timestamp).total_seconds())
+	if delta_time < 60:
+		return "just now"
+	
+	if delta_time < 3600:
+		minutes = delta_time // 60
+		return f"{minutes} minutes ago"
+	
+	if delta_time < 86400:
+		hours = delta_time // 3600
+		return f"{hours} hours ago"
+	
+	if delta_time < 86400 * 7:
+		days = delta_time // 86400
+		return f"{days} days ago"
+	
+	weeks = delta_time // (86400 * 7)
+	return f"{weeks} weeks ago"
+	

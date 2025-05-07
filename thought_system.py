@@ -1,13 +1,15 @@
 #pylint:disable=C0115
 #pylint:disable=C0114
 import json
+import time
 from datetime import datetime
 
 from llm import MistralLLM
 from const import *
 from utils import (
 	get_model_to_use,
-	format_memories_to_string
+	format_memories_to_string,
+	time_since_last_message_string
 )
 from emotion_system import Emotion
 
@@ -107,10 +109,12 @@ class ThoughtSystem:
 				data["emotion"] = "Neutral"
 
 		data.setdefault("next_action", "final_answer")
+		
+		data.setdefault("relationship_change", {"friendliness": 0.0, "dominance": 0.0})
 
 		return data
 	
-	def think(self, messages, memories, recalled_memories):
+	def think(self, messages, memories, recalled_memories, last_message):
 		"""Generates the AI's internal thoughts and emotions"""
 		memories_str = format_memories_to_string(
 			memories,
@@ -144,6 +148,9 @@ class ThoughtSystem:
 			belief_str = "\n".join(f"- {belief}" for belief in beliefs)
 		else:
 			belief_str = "None"
+		
+		last_interaction = time_since_last_message_string(last_message)
+		print(last_interaction)
 		prompt = THOUGHT_PROMPT.format(
 			name=self.config.name,
 			user_input=text_content,
@@ -154,7 +161,8 @@ class ThoughtSystem:
 			mood_prompt=self.emotion_system.get_mood_prompt(),
 			memories=memories_str,
 			relationship_str=self.relation_system.get_string(),
-			beliefs=belief_str
+			beliefs=belief_str,
+			last_interaction=last_interaction
 		)
 		prompt_content = prompt
 		if img_data:
@@ -239,6 +247,11 @@ class ThoughtSystem:
 			data["emotion"],
 			data["emotion_intensity"]
 		)
+		relation_change = data["relationship_change"]
 		data["emotion_obj"] = emotion
-
+		
+		self.relation_system.change_relationship(
+			relation_change.get("friendliness", 0.0),
+			relation_change.get("dominance", 0.0)
+		)
 		return data
