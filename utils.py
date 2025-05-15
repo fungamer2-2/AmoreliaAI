@@ -136,24 +136,10 @@ def conversation_to_string(messages, ai_name="AI"):
 		
 	return "\n\n".join(string)
 
-
-def get_model_to_use(messages):
-	for msg in messages:
-		if msg["role"] != "user":
-			continue
-		content = msg["content"]
-		if isinstance(content, list) and any(chunk["type"] == "image_url" for chunk in content):
-			model_name = "pixtral-large-latest"
-			break		
-	else:
-		model_name = "mistral-large-latest"
-
-	return MistralLLM(model_name)
-	
 	
 def format_memories_to_string(memories, default=""):
 	return "\n".join(mem.format_memory() for mem in memories) if memories else default
-	
+
 
 def is_image_url(url):
 	try:
@@ -165,6 +151,7 @@ def is_image_url(url):
 		)
 	except requests.RequestException:
 		return False
+
 
 def time_since_last_message_string(timestamp):
 	if not timestamp:

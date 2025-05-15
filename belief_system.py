@@ -108,8 +108,7 @@ class BeliefSystem:
 		"""Generates a new belief given a memory."""
 		for _ in range(4):
 			belief = self._generate_belief(memory, importance)
-			if not self._has_belief(belief) and self._add_belief(belief):		
-				print(f"New belief: {belief}")
+			if not self._has_belief(belief) and self._add_belief(belief):
 				break
 
 	def _tick(self, dt):

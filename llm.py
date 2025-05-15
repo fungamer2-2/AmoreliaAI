@@ -92,7 +92,7 @@ def _convert_system_to_user(messages):
 class MistralLLM:
 	"""Class representing a model from the Mistral AI API"""
 
-	def __init__(self, model="mistral-large-latest"):
+	def __init__(self, model="mistral-medium-latest"):
 		self.model = model
 
 	def _parse_json(self, response):
@@ -118,6 +118,13 @@ class MistralLLM:
 			raise ValueError("return_json must be True if schema is provided")
 		if isinstance(prompt, str):
 			prompt = [{"role":"user", "content":prompt}]
+		
+		if self.model not in [
+			"mistral-small-latest",
+			"mistral-medium-latest",
+			"mistral-large-latest"
+		]:
+			prompt = _convert_system_to_user(prompt)
 		
 		if schema:
 			format = {

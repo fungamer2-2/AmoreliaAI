@@ -7,7 +7,6 @@ from datetime import datetime
 from llm import MistralLLM
 from const import *
 from utils import (
-	get_model_to_use,
 	format_memories_to_string,
 	time_since_last_message_string
 )
@@ -177,13 +176,12 @@ class ThoughtSystem:
 			{"role":"user", "content":"[END OF PREVIOUS CHAT HISTORY]"},
 			{"role":"user", "content":prompt_content}
 		]
-		model = get_model_to_use(messages)
 		
 		data = {}
 		for _ in range(3):
-			data = model.generate(
+			data = self.model.generate(
 				thought_history,
-				temperature=0.8,
+				temperature=1.0,
 				return_json=True,
 				schema=THOUGHT_SCHEMA
 			)
@@ -241,7 +239,7 @@ class ThoughtSystem:
 			data["thoughts"] = all_thoughts
 			if num_steps >= MAX_THOUGHT_STEPS:
 				break
-
+		
 		emotion = self.emotion_system.experience_emotion(
 			data["emotion"],
 			data["emotion_intensity"]

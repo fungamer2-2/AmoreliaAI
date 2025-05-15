@@ -150,7 +150,7 @@ class AIConfig(BaseModel):
 			conscientious=0.25,
 			extrovert=0.18,
 			agreeable=0.93,
-			neurotic=-0.15
+			neurotic=-0.05
 		)
 	)
 
@@ -184,6 +184,8 @@ class AISystem:
 			self.relation_system,
 			self.personality_system
 		)
+		
+		self.model = MistralLLM()
 
 		self.num_messages = 0
 		self.last_message = None
@@ -219,7 +221,6 @@ class AISystem:
 
 	def _image_to_description(self, image_url):
 		messages = [
-			{"role":"system", "content":self.config.system_prompt},
 			{
 				"role":"user",
 				"content": [
@@ -286,6 +287,7 @@ class AISystem:
 			"curr_time": now.strftime("%-I:%M %p"),
 			"user_emotion_str": user_emotion_str,
 			"beliefs": belief_str,
+			"mood_long_desc": self.emotion_system.get_mood_long_description(),
 			"mood_prompt": self.emotion_system.get_mood_prompt(),
 			"last_interaction": time_since_last_message_string(self.last_message)
 		}
@@ -346,11 +348,11 @@ class AISystem:
 
 		history[-1]["content"] = prompt_content
 
-		model = get_model_to_use(history)
-
-		response = model.generate(
+		
+		response = self.model.generate(
 			history,
-			temperature=0.8,
+			temperature=1.0,
+			max_tokens=2048,
 			return_json=return_json
 		)
 
@@ -478,17 +480,18 @@ def _parse_args(arg_list_str):
 		i += 1
 	if last_tok:
 		tokens.append(_try_convert_arg(last_tok))
+	
 	return tokens
 	
 
 def command_parse(string):
 	"""Parses a command into its arguments"""
-	split = string.split(None, 1)
+	split = string.split(None, 1)	
 	if len(split) == 2:
 		command, remaining = split
 	else:
 		command, remaining = string, ""
-	args = remaining.split()
+	args = remaining
 	return command, _parse_args(args)
 	
 
@@ -512,13 +515,13 @@ def main():
 			continue
 			
 		if msg.startswith("/"):
-			command, args = command_parse(msg[1:])
+			command, args = command_parse(msg[1:])	
 			if command == "set_pleasure" and len(args) == 1:
 				value = args[0]
 				if not isinstance(value, (int, float)):
 					continue
 				ai.set_mood(pleasure=value)
-			if command == "set_arousal" and len(args) == 1:
+			elif command == "set_arousal" and len(args) == 1:
 				value = args[0]
 				if not isinstance(value, (int, float)):
 					continue
@@ -538,6 +541,12 @@ def main():
 				if not isinstance(value, (int, float)):
 					continue
 				ai.set_relation(dominance=value)
+			elif command == "add_emotion" and len(args) == 2:
+				emotion = args[0]
+				value = args[1]
+				if not isinstance(value, (int, float)):
+					continue
+				ai.emotion_system.experience_emotion(emotion, value)
 			elif command == "show_thoughts":
 				ai.set_thought_visibility(True)
 			elif command == "hide_thoughts":

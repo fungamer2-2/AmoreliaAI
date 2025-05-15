@@ -317,9 +317,7 @@ class EmotionSystem:
 	def reset_mood(self):
 		self.mood = self.get_base_mood() / 2
 	
-	def _get_mood_word(self, val, pos_str, neg_str):
-		if abs(val) < 0.04:
-			return "neutral"
+	def _get_adv(self, val):
 		if abs(val) > 0.9:
 			adv = "extremely"
 		elif abs(val) > 0.65:
@@ -328,15 +326,32 @@ class EmotionSystem:
 			adv = "moderately"
 		else:
 			adv = "slightly "
+		return adv
+	
+	def _get_mood_word(self, val, pos_str, neg_str):
+		if abs(val) < 0.04:
+			return "neutral"
 		
-		return adv + " " + (pos_str if val >= 0 else neg_str)
+		return self._get_adv(val) + " " + (pos_str if val >= 0 else neg_str)
 			
-	def get_mood_long_description(self):	
+	def get_mood_long_description(self):
 		mood = self.mood	
+		
+		arousal_desc = f"Arousal: {num_to_str_sign(mood.arousal, 2)} ({self._get_mood_word(mood.arousal, 'energized', 'soporific')})"
+		dominance_desc = f"Dominance: {num_to_str_sign(mood.dominance, 2)} ({self._get_mood_word(mood.dominance, 'dominant', 'submissive')})"	
+		
+		if mood.dominance > 0.04:
+			adv = self._get_adv(mood.dominance)
+			dominance_desc += f" - You feel {adv} compelled to lead the conversation."
+		elif mood.dominance < -0.04:
+			adv = self._get_adv(mood.dominance)
+			dominance_desc += f" - You feel {adv} compelled to let others lead the conversation."
+										
+		
 		return "\n".join([
 			f"Pleasure: {num_to_str_sign(mood.pleasure, 2)} ({self._get_mood_word(mood.pleasure, 'pleasant', 'unpleasant')})",
-			f"Arousal: {num_to_str_sign(mood.arousal, 2)} ({self._get_mood_word(mood.arousal, 'energized', 'soporific')})",
-			f"Dominance: {num_to_str_sign(mood.dominance, 2)} ({self._get_mood_word(mood.dominance, 'dominant', 'submissive')})"
+			arousal_desc,
+			dominance_desc
 		])
 		
 	def print_mood(self):
@@ -402,7 +417,7 @@ class EmotionSystem:
 			+ PERSONALITY_INTENSITY_FACTOR * personality_align
 		)
 		intensity += intensity_mod
-		intensity = max(0.05, min(intensity, 1.0))
+		intensity = max(0.05, intensity)
 		self.relation.on_emotion(name, intensity)
 		emotion *= intensity
 		self.add_emotion(emotion)
@@ -500,8 +515,8 @@ class EmotionSystem:
 			t -= substep
 	
 	def _apply_mood_noise(self, t):	
-		neurotic_mult = 1 + self.personality_system.neurotic
-		mood_noise_stdev = 0.004 * neurotic_mult * math.sqrt(t)	
+		neurotic_mult = 3**self.personality_system.neurotic
+		mood_noise_stdev = 0.005 * neurotic_mult * math.sqrt(t)	
 		self.mood.pleasure += random.gauss(0, mood_noise_stdev)
 		self.mood.arousal += random.gauss(0, mood_noise_stdev)
 		self.mood.dominance += random.gauss(0, mood_noise_stdev)		
