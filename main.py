@@ -13,7 +13,6 @@ from pydantic import BaseModel, Field
 from llm import MistralLLM
 from utils import (
 	clear_screen,
-	get_model_to_use,
 	is_image_url,
 	format_memories_to_string,
 	time_since_last_message_string
@@ -351,7 +350,7 @@ class AISystem:
 		
 		response = self.model.generate(
 			history,
-			temperature=1.0,
+			temperature=1.05,
 			max_tokens=2048,
 			return_json=return_json
 		)
