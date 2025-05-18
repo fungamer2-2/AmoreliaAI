@@ -11,7 +11,9 @@ Currently uses [Mistral AI](https://mistral.ai) models. To use this project, you
 
 ## 💭 Thought system
 
-Before responding, Amorelia is prompted to generate a list of thoughts from its perspective. These thoughts are treated as the AI's "inner monologue." This helps make it a bit more realistic, and think as if it truly had its own personality.
+Amorelia is designed to think before responding. These thoughts are treated as the AI's "inner monologue." This helps make it a bit more realistic, and think as if it truly had its own personality.
+
+For complex or nuanced queries, Amorelia may decide to continue thinking so it can carefully consider the query before responding.
 
 Periodically, Amorelia will reflect and gather insights to add to its memory, in order to gain a higher-level understanding of the user.
 
