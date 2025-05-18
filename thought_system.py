@@ -108,11 +108,9 @@ class ThoughtSystem:
 				data["emotion"] = "Neutral"
 
 		data.setdefault("next_action", "final_answer")
-		
 		data.setdefault("relationship_change", {"friendliness": 0.0, "dominance": 0.0})
-
 		return data
-	
+
 	def think(self, messages, memories, recalled_memories, last_message):
 		"""Generates the AI's internal thoughts and emotions"""
 		memories_str = format_memories_to_string(
@@ -122,6 +120,7 @@ class ThoughtSystem:
 
 		memory_emotion = Emotion()
 		if recalled_memories:
+			# Add emotion influence from recalled memories
 			total_weight = 0.0
 			for memory in recalled_memories:
 				weight = memory.get_recency_factor(True)
@@ -141,7 +140,7 @@ class ThoughtSystem:
 			img_data = content[0]
 		else:
 			text_content = content
-	
+
 		beliefs = self.memory_system.get_beliefs()
 		if beliefs:
 			belief_str = "\n".join(f"- {belief}" for belief in beliefs)
@@ -199,14 +198,15 @@ class ThoughtSystem:
 			for thought in data["thoughts"]:
 				print(f"- {thought}")
 			print()
-	
+
 		thoughts_query = " ".join(data["thoughts"])
 		num_steps = 0
+		
+		# Let it continue thinking if necessary
 		while data["next_action"].lower() == "continue_thinking":
 			num_steps += 1
 			added_context = ""
 			relevant_memories = self.memory_system.long_term.retrieve(thoughts_query, MEMORY_RETRIEVAL_TOP_K)
-
 			if relevant_memories:
 				added_context = ADDED_CONTEXT_TEMPLATE.format(
 					"\n".join(mem.format_memory() for mem in memories)
@@ -216,9 +216,9 @@ class ThoughtSystem:
 				"role": "user",
 				"content": HIGHER_ORDER_THOUGHTS.format(added_context=added_context)
 			})
-			new_data = model.generate(
+			new_data = self.model.generate(
 				thought_history,
-				temperature=0.8,
+				temperature=1.0,
 				return_json=True,
 				schema=THOUGHT_SCHEMA
 			)
@@ -228,22 +228,24 @@ class ThoughtSystem:
 				"content": json.dumps(new_data, indent=4)
 			})
 			thoughts_query = " ".join(new_data["thoughts"])
-		
+	
 			if self.show_thoughts:
 				for thought in new_data["thoughts"]:
 					print(f"- {thought}")
 				print()
-	
+
 			all_thoughts = data["thoughts"] + new_data["thoughts"]
 			data = new_data.copy()
 			data["thoughts"] = all_thoughts
 			if num_steps >= MAX_THOUGHT_STEPS:
 				break
-		
+
 		emotion = self.emotion_system.experience_emotion(
 			data["emotion"],
 			data["emotion_intensity"]
 		)
+		#print(f'{data["emotion"]}, {data["emotion_intensity"]}')
+#		print(data["emotion_reason"])
 		relation_change = data["relationship_change"]
 		data["emotion_obj"] = emotion
 		

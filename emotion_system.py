@@ -31,7 +31,7 @@ def get_default_mood(openness, conscientious, extrovert, agreeable, neurotic):
 
 def summarize_personality(openness, conscientious, extrovert, agreeable, neurotic):
 	"""Summarizes the personality values into a natural language personality description."""
-	model = MistralLLM("mistral-large-latest")
+	model = MistralLLM("mistral-medium-latest")
 	personality_str = "\n".join([
 		f"Openness: {num_to_str_sign(openness, 2)}",
 		f"Conscientiousness: {num_to_str_sign(conscientious, 2)}",
@@ -170,7 +170,7 @@ class Emotion:
 			+ self.arousal * other.arousal
 			+ self.dominance * other.dominance
 		)
-	
+
 	def get_intensity(self):
 		"""Gets the intensity of the emotion"""
 		return math.sqrt(self.pleasure**2 + self.arousal ** 2 + self.dominance**2)
@@ -215,7 +215,8 @@ class Emotion:
 
 
 class RelationshipSystem:
-	relation_change_mult = 1.7
+	"""The system that manages the AI's relationship with the user."""
+	relation_change_mult = 1.8
 
 	def __init__(self):
 		self.friendliness = 0.0
@@ -233,39 +234,35 @@ class RelationshipSystem:
 			self.dominance = max(-100, min(dominance, 100))
 	
 	def tick(self, dt):
+		"""Runs a tick to update the values."""
 		num_days = dt / 86400
 		self.friendliness *= math.exp(-num_days/40)
 		self.dominance *= math.exp(-num_days/80)
 
 	def on_emotion(self, emotion, intensity):
+		"""This is called when an emotion is triggered."""
 		if emotion not in ["Joy", "Distress", "Admiration", "Reproach", "Gratitude", "Anger"]:
 			return
 		
 		pleasure, _, dominance = EMOTION_MAP[emotion]
 	
-		pleasure *= intensity * random.triangular(0.8, 1.2)
-		dominance *= intensity * random.triangular(0.8, 1.2)
+		pleasure *= intensity * random.triangular(0.4, 0.6)
+		dominance *= intensity * random.triangular(0.4, 0.6)
 	
 		self.change_relationship(pleasure, dominance)
 		
 	def change_relationship(self, friendliness, dominance):
+		"""Adjusts the relationship values."""
 		friendliness *= self.relation_change_mult
 		dominance *= self.relation_change_mult
 		
-		#if abs(friendliness) > 0.001:
-#			sign = "+" if friendliness >= 0.0 else ""
-#			print(f"{sign}{friendliness:.2f} friendliness")
-#		if abs(dominance) > 0.001:
-#			sign = "+" if dominance >= 0.0 else ""
-#			print(f"{sign}{dominance:.2f} dominance")
-#				
-#		
 		self.set_relation(
 			self.friendliness + friendliness,
 			self.dominance + dominance
 		)
 	
 	def print_relation(self):
+		"""Disays the relationship values."""
 		print("Relationship:")
 		print("-------------")
 		string = val_to_symbol_color(self.friendliness, 20, Fore.green, Fore.red, val_scale=100)
@@ -274,6 +271,7 @@ class RelationshipSystem:
 		print(f"Dominance:    {string}")
 	
 	def get_string(self):
+		"""Converts the relationship values to a string."""
 		return "\n".join((
 			"Friendliness: " + val_to_symbol_color(self.friendliness, 20, val_scale=100),
 			"Dominance: " + val_to_symbol_color(self.dominance, 20, val_scale=100)
@@ -281,7 +279,7 @@ class RelationshipSystem:
 		
 	
 class EmotionSystem:
-
+	"""The system that manages its emotions."""
 	def __init__(
 		self,
 		personality_system,
@@ -315,6 +313,7 @@ class EmotionSystem:
 			self.mood.dominance = max(-1.0, min(1.0, dominance))
 
 	def reset_mood(self):
+		"""Resets the AI's mood."""
 		self.mood = self.get_base_mood() / 2
 	
 	def _get_adv(self, val):
@@ -325,7 +324,7 @@ class EmotionSystem:
 		elif abs(val) > 0.35:
 			adv = "moderately"
 		else:
-			adv = "slightly "
+			adv = "slightly"
 		return adv
 	
 	def _get_mood_word(self, val, pos_str, neg_str):
@@ -335,7 +334,7 @@ class EmotionSystem:
 		return self._get_adv(val) + " " + (pos_str if val >= 0 else neg_str)
 			
 	def get_mood_long_description(self):
-		mood = self.mood	
+		mood = self.mood
 		
 		arousal_desc = f"Arousal: {num_to_str_sign(mood.arousal, 2)} ({self._get_mood_word(mood.arousal, 'energized', 'soporific')})"
 		dominance_desc = f"Dominance: {num_to_str_sign(mood.dominance, 2)} ({self._get_mood_word(mood.dominance, 'dominant', 'submissive')})"	
@@ -514,12 +513,13 @@ class EmotionSystem:
 			self._tick_mood_decay(step)
 			t -= substep
 	
-	def _apply_mood_noise(self, t):	
+	def _apply_mood_noise(self, t):
+		# Apply some randomness to the mood changes
 		neurotic_mult = 3**self.personality_system.neurotic
-		mood_noise_stdev = 0.005 * neurotic_mult * math.sqrt(t)	
+		mood_noise_stdev = 0.007 * neurotic_mult * math.sqrt(t)
 		self.mood.pleasure += random.gauss(0, mood_noise_stdev)
 		self.mood.arousal += random.gauss(0, mood_noise_stdev)
-		self.mood.dominance += random.gauss(0, mood_noise_stdev)		
+		self.mood.dominance += random.gauss(0, mood_noise_stdev)
 		self.mood.clamp()
 		
 		

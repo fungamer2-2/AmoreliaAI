@@ -175,7 +175,7 @@ class AISystem:
 			self.personality_system,
 			self.relation_system
 		)
-		
+	
 		self.thought_system = ThoughtSystem(
 			config,
 			self.emotion_system,
@@ -183,7 +183,7 @@ class AISystem:
 			self.relation_system,
 			self.personality_system
 		)
-		
+
 		self.model = MistralLLM()
 
 		self.num_messages = 0
@@ -193,7 +193,7 @@ class AISystem:
 
 		self.buffer = MessageBuffer(20)
 		self.buffer.set_system_prompt(config.system_prompt)
-		
+	
 	def set_config(self, config):
 		"""Updates the config"""
 		self.memory_system.config = config
@@ -294,7 +294,7 @@ class AISystem:
 	def send_message(self, user_input: str, attached_image=None, return_json=False):
 		"""Sends a message to the AI, and returns the response."""
 		self.tick()
-		
+
 		self.last_recall_tick = datetime.now()
 		self.buffer.set_system_prompt(self.config.system_prompt)
 
@@ -350,7 +350,7 @@ class AISystem:
 		
 		response = self.model.generate(
 			history,
-			temperature=1.05,
+			temperature=1.0,
 			max_tokens=2048,
 			return_json=return_json
 		)
@@ -485,7 +485,7 @@ def _parse_args(arg_list_str):
 
 def command_parse(string):
 	"""Parses a command into its arguments"""
-	split = string.split(None, 1)	
+	split = string.split(None, 1)
 	if len(split) == 2:
 		command, remaining = split
 	else:
@@ -510,11 +510,11 @@ def main():
 			print(f"Attached image: {attached_image}")
 		msg = input("User: ").strip()
 		if not msg:
-			ai.save(SAVE_PATH)	
+			ai.save(SAVE_PATH)
 			continue
 			
 		if msg.startswith("/"):
-			command, args = command_parse(msg[1:])	
+			command, args = command_parse(msg[1:])
 			if command == "set_pleasure" and len(args) == 1:
 				value = args[0]
 				if not isinstance(value, (int, float)):
@@ -616,12 +616,15 @@ def main():
 			ai = backup_ai  # Restore in case something changed before the error
 			traceback.print_exception(type(e), e, e.__traceback__)
 			print("An error occurred. Please try again in a moment.")
-			print("If the issue persists, please open an issue on GitHub: https://github.com/fungamer2-2/HumanlikeAI/issues/new?template=bug_report.md")
+			print(
+				"If the issue persists, please open an issue on GitHub: " \
+				"https://github.com/fungamer2-2/HumanlikeAI/issues/new?template=bug_report.md"
+			)
 		else:
 			print(f"{ai.config.name}: " + message)
 			ai.save(SAVE_PATH)
 			attached_image = None
-		
+
 
 if __name__ == "__main__":
 	main()
