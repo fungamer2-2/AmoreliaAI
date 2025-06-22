@@ -12,7 +12,6 @@ from const import (
 	PERSONALITY_INTENSITY_FACTOR,
 	MOOD_HALF_LIFE,
 	EMOTION_HALF_LIFE,
-	NEG_EMOTION_MULT,
 	MOOD_CHANGE_VEL
 )
 from utils import num_to_str_sign, val_to_symbol_color
@@ -170,6 +169,9 @@ class Emotion:
 			+ self.arousal * other.arousal
 			+ self.dominance * other.dominance
 		)
+		
+	def cosine_sim(self, other):
+		return self.dot(other) / (self.get_norm() * other.get_norm() + 1e-7)
 
 	def get_intensity(self):
 		"""Gets the intensity of the emotion"""
@@ -183,12 +185,12 @@ class Emotion:
 
 		return math.sqrt(delta_pleasure**2 + delta_arousal**2 + delta_dominance**2)
 
-	def _get_norm(self):
+	def get_norm(self):
 		return max(abs(self.pleasure), abs(self.arousal), abs(self.dominance))
 
 	def clamp(self):
 		"""Clips the emotion vector by norm if it is outside the range"""
-		norm = self._get_norm()
+		norm = self.get_norm()
 		if norm > 1:
 			self /= norm
 	
@@ -216,7 +218,7 @@ class Emotion:
 
 class RelationshipSystem:
 	"""The system that manages the AI's relationship with the user."""
-	relation_change_mult = 1.8
+	relation_change_mult = 1.7
 
 	def __init__(self):
 		self.friendliness = 0.0
@@ -246,9 +248,9 @@ class RelationshipSystem:
 		
 		pleasure, _, dominance = EMOTION_MAP[emotion]
 	
-		pleasure *= intensity * random.triangular(0.4, 0.6)
-		dominance *= intensity * random.triangular(0.4, 0.6)
-	
+		pleasure *= intensity
+		dominance *= intensity
+		
 		self.change_relationship(pleasure, dominance)
 		
 	def change_relationship(self, friendliness, dominance):
@@ -256,10 +258,15 @@ class RelationshipSystem:
 		friendliness *= self.relation_change_mult
 		dominance *= self.relation_change_mult
 		
+		if (friendliness > 0) == (self.friendliness > 0):
+			friendliness *= 1 - abs(self.friendliness) / 100
+		if (dominance > 0) == (self.dominance > 0):
+			dominance *= 1 - abs(self.dominance) / 100
+		
 		self.set_relation(
 			self.friendliness + friendliness,
 			self.dominance + dominance
-		)
+		)	
 	
 	def print_relation(self):
 		"""Disays the relationship values."""
@@ -295,7 +302,7 @@ class EmotionSystem:
 		self.personality_system = personality_system
 		self.relation = relation_system
 		self.base_mood = base_mood
-		self.mood = self.get_base_mood() / 2
+		self.mood = self.get_base_mood()
 		self.last_update = time.time()
 		self.emotions = []
 	
@@ -314,7 +321,7 @@ class EmotionSystem:
 
 	def reset_mood(self):
 		"""Resets the AI's mood."""
-		self.mood = self.get_base_mood() / 2
+		self.mood = self.get_base_mood()
 	
 	def _get_adv(self, val):
 		if abs(val) > 0.9:
@@ -336,19 +343,27 @@ class EmotionSystem:
 	def get_mood_long_description(self):
 		mood = self.mood
 		
+		pleasure_desc = f"Pleasure: {num_to_str_sign(mood.pleasure, 2)} ({self._get_mood_word(mood.pleasure, 'pleasant', 'unpleasant')})"
 		arousal_desc = f"Arousal: {num_to_str_sign(mood.arousal, 2)} ({self._get_mood_word(mood.arousal, 'energized', 'soporific')})"
 		dominance_desc = f"Dominance: {num_to_str_sign(mood.dominance, 2)} ({self._get_mood_word(mood.dominance, 'dominant', 'submissive')})"	
 		
+		if mood.arousal > 0.04:
+			adv = self._get_adv(mood.arousal)
+			arousal_desc += f" - Will be {adv} upbeat and energetic in tone."
+		elif mood.arousal < -0.04:
+			adv = self._get_adv(mood.arousal)
+			arousal_desc += f" - Will be {adv} soft and gentle in tone."
+						
 		if mood.dominance > 0.04:
 			adv = self._get_adv(mood.dominance)
-			dominance_desc += f" - You feel {adv} compelled to lead the conversation."
+			dominance_desc += f" - Feels {adv} compelled to lead the conversation."
 		elif mood.dominance < -0.04:
 			adv = self._get_adv(mood.dominance)
-			dominance_desc += f" - You feel {adv} compelled to let others lead the conversation."
+			dominance_desc += f" - Feels {adv} compelled to defer more and let others lead the conversation."
 										
 		
 		return "\n".join([
-			f"Pleasure: {num_to_str_sign(mood.pleasure, 2)} ({self._get_mood_word(mood.pleasure, 'pleasant', 'unpleasant')})",
+			pleasure_desc,
 			arousal_desc,
 			dominance_desc
 		])
@@ -415,8 +430,9 @@ class EmotionSystem:
 			MODD_INTENSITY_FACTOR * mood_align
 			+ PERSONALITY_INTENSITY_FACTOR * personality_align
 		)
-		intensity += intensity_mod
+		intensity *= 1.0 + intensity_mod
 		intensity = max(0.05, intensity)
+		#print(f"Intensity {intensity}")
 		self.relation.on_emotion(name, intensity)
 		emotion *= intensity
 		self.add_emotion(emotion)
@@ -426,16 +442,13 @@ class EmotionSystem:
 		self.emotions.append(emotion)
 
 	def _tick_emotion_change(self, t):
-		personality = self.personality_system
 		new_emotions = []
 		emotion_center = Emotion()
 		for emotion in self.emotions:
 			half_life = EMOTION_HALF_LIFE
-			if emotion.pleasure < 0:
-				half_life *= 1 + (personality.neurotic + 1) / 2
 			emotion_decay = 0.5 ** (t / half_life)
 			emotion *= emotion_decay
-			if emotion.get_intensity() >= 0.02:
+			if emotion.get_intensity() >= 0.01:
 				new_emotions.append(emotion)
 				emotion_center += emotion
 		
@@ -452,12 +465,12 @@ class EmotionSystem:
 				self.mood = emotion_center.copy()
 			
 			if (
-				emotion_center.is_same_octant(self.mood)
-				and emotion_center.get_intensity() < self.mood.get_intensity()
+				emotion_center.get_intensity() < self.mood.get_intensity()
+				#and emotion_center.is_same_octant(self.mood)
 			):
-				delta = emotion_center
+				delta = emotion_center  # Push phase
 			else:
-				delta = (emotion_center + (emotion_center - self.mood)) / 2
+				delta = emotion_center - self.mood  # Pull phase
 			self.mood += t * v * delta
 			self.mood.clamp()
 			return True
@@ -488,18 +501,24 @@ class EmotionSystem:
 		return base_mood
 
 	def _tick_mood_decay(self, t):
-		r = 0.5 ** (t / MOOD_HALF_LIFE)
+		half_life = MOOD_HALF_LIFE
+		alignment = self.mood.cosine_sim(self.get_base_mood())
+		half_life *= 2**alignment 
 		
-		self.mood += (self.get_base_mood()/2 - self.mood) * (1 - r)
+		r = 0.5 ** (t / half_life)
+		
+		self.mood += (self.get_base_mood() - self.mood) * (1 - r)
 
 	def tick(self, dt=None):
 		if dt is None:
 			dt = time.time() - self.last_update
+
+		self.relation.tick(dt)
 		self.last_update = time.time()
 		t = dt
 		while t > 0:
-			step = min(t, 1.0)
-			self._apply_mood_noise(step)
+			step = min(t, 1.0)	
+			self._apply_mood_noise(step/2)
 			if not self._tick_emotion_change(step):
 				break
 			t -= step
@@ -511,12 +530,12 @@ class EmotionSystem:
 			step = min(t, substep)
 			self._apply_mood_noise(step)
 			self._tick_mood_decay(step)
-			t -= substep
-	
+			t -= step
+
 	def _apply_mood_noise(self, t):
 		# Apply some randomness to the mood changes
 		neurotic_mult = 3**self.personality_system.neurotic
-		mood_noise_stdev = 0.007 * neurotic_mult * math.sqrt(t)
+		mood_noise_stdev = 0.006 * neurotic_mult * math.sqrt(t)
 		self.mood.pleasure += random.gauss(0, mood_noise_stdev)
 		self.mood.arousal += random.gauss(0, mood_noise_stdev)
 		self.mood.dominance += random.gauss(0, mood_noise_stdev)
@@ -524,11 +543,17 @@ class EmotionSystem:
 		
 		
 if __name__ == "__main__":
-	description = summarize_personality(
-		openness=-0.04,
-		conscientious=+0.25,
-		extrovert=-0.04,
-		agreeable=+0.42,
-		neurotic=+0.21
+	
+	personality = PersonalitySystem(
+		openness=0,
+		conscientious=0,
+		extrovert=0,
+		agreeable=0,
+		neurotic=0
 	)
-	print(description)
+	sys = EmotionSystem(personality, RelationshipSystem())
+	sys.experience_emotion("Fear", 10)
+	print(sys.mood)
+	while sys.emotions:
+		sys.tick(1)
+		print(sys.mood)

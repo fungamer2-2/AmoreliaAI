@@ -1,4 +1,4 @@
-"""The main module that runs the AI."""
+#1"""The main module that runs the AI."""
 
 import copy
 import os
@@ -54,7 +54,7 @@ class MessageBuffer:
 
 	def flush(self):
 		"""Clears the buffer, removing all messages."""
-		self.messages.clear()
+		self.messages.clear()	
 	
 	def to_list(self, include_system_prompt=True):
 		"""Converts the buffer to a list of messages.
@@ -69,8 +69,11 @@ class MessageBuffer:
 
 GENERATE_USER_RESPONSES_PROMPT = """# Task
 
+The human is chatting with Amorelia, a friendly and empathetic virtual companion.
+It aims to connect on a deeper level, and is good at providing emotional support when needed.
+
 Given the following conversation, please suggest 3 to 5 possible responses that the HUMAN could respond to the last AI message given the conversation context.
-Try to match the human's tone and style as closely as possible. 
+Try to match the human's tone and style as closely as possible.
 
 # Role descriptions
 
@@ -100,20 +103,23 @@ Remember, try to match the human's tone and style as closely as possible.
 
 Possible **HUMAN** responses:"""
 	
-from datetime import datetime
+
 def suggest_responses(conversation):
 	"""Generates a list of potential user responses given the conversation history."""
 	role_map = {
 		"user": "HUMAN",
 		"assistant": "AI"
 	}
-	history_str = "\n\n".join(
-		f"{role_map[msg['role']]}: {msg['content']}"
-		for msg in conversation
-		if msg["role"] != "system"
-	)
+	if conversation:
+		history_str = "\n\n".join(
+			f"{role_map[msg['role']]}: {msg['content']}"
+			for msg in conversation
+			if msg["role"] != "system"
+		)
+	else:
+		history_str = "No conversation yet; generate suggested greetings/starters for the human."
 	now = datetime.now()
-	model = MistralLLM("mistral-small-latest")
+	model = MistralLLM("mistral-medium-latest")
 	prompt = GENERATE_USER_RESPONSES_PROMPT.format(
 		conversation_history=history_str,
 		date=now.strftime("%a, %-m/%-d/%Y"),
@@ -122,7 +128,8 @@ def suggest_responses(conversation):
 
 	data = model.generate(
 		prompt,
-		temperature=0.7,
+		temperature=1.0,
+		presence_penalty=1.5,
 		return_json=True
 	)
 	return data["possible_responses"]
@@ -235,7 +242,7 @@ class AISystem:
 				]
 			}
 		]
-		model = MistralLLM("pixtral-large-latest")
+		model = MistralLLM("mistral-medium-latest")
 		return model.generate(
 			messages,
 			temperature=0.1,
@@ -264,7 +271,7 @@ class AISystem:
 		else:
 			user_emotion_str = "The user doesn't appear to show any strong emotion."
 
-		thought_str = "\n".join("- " + thought for thought in thought_data["thoughts"])
+		thought_str = "\n".join("- " + thought["content"] for thought in thought_data["thoughts"])
 		beliefs = self.memory_system.get_beliefs()
 		if beliefs:
 			belief_str = "\n".join(f"- {belief}" for belief in beliefs)
@@ -294,7 +301,7 @@ class AISystem:
 	def send_message(self, user_input: str, attached_image=None, return_json=False):
 		"""Sends a message to the AI, and returns the response."""
 		self.tick()
-
+		
 		self.last_recall_tick = datetime.now()
 		self.buffer.set_system_prompt(self.config.system_prompt)
 
@@ -302,12 +309,12 @@ class AISystem:
 		if attached_image is not None:
 			content = [
 				{
-					"type": "image_url",
-					"image_url": attached_image
-				},
-				{
 					"type": "text",
 					"text": user_input
+				},
+				{
+					"type": "image_url",
+					"image_url": attached_image
 				}
 			]
 		self.buffer.add_message("user", content)
@@ -329,10 +336,10 @@ class AISystem:
 		img_data = None
 		if isinstance(content, list):
 			assert len(content) == 2
-			assert content[0]["type"] == "image_url"
-			assert content[1]["type"] == "text"
-			text_content = content[1]["text"] + "\n\n((The user attached an image to this message))"
-			img_data = content[0]
+			assert content[0]["type"] == "text"
+			assert content[1]["type"] == "image_url"
+			text_content = content[0]["text"] + "\n\n((The user attached an image to this message))"
+			img_data = content[1]
 		else:
 			text_content = content
 
@@ -346,11 +353,12 @@ class AISystem:
 			]
 
 		history[-1]["content"] = prompt_content
-
 		
 		response = self.model.generate(
 			history,
 			temperature=1.0,
+			presence_penalty=1.0,
+			frequency_penalty=0.5,
 			max_tokens=2048,
 			return_json=return_json
 		)
@@ -397,6 +405,9 @@ class AISystem:
 			friendliness=friendliness,
 			dominance=dominance
 		)
+		
+	def get_memories(self):
+		return self.memory_system.get_short_term_memories()
 
 	def tick(self):
 		"""Runs a tick to update the AI's systems"""
@@ -502,7 +513,7 @@ def main():
 	attached_image = None
 	ai = AISystem.load_or_create(SAVE_PATH)
 	print(f"{Fore.yellow}Note: It's recommended not to enter any sensitive information.{Style.reset}")
-	
+
 	while True:
 		ai.tick()
 		ai.emotion_system.print_mood()
@@ -566,11 +577,11 @@ def main():
 				attached_image = None
 			elif command == "memories":
 				print("Current memories:")
-				for memory in ai.memory_system.get_short_term_memories():
+				for memory in ai.get_memories():
 					print(memory.format_memory())
 			elif command == "suggest":
 				history = ai.get_message_history(False)
-				if history:
+				if True or history:
 					print("Suggesting possible user responses...")
 					possible_responses = suggest_responses(history)
 					print("Possible responses:")
@@ -581,7 +592,7 @@ def main():
 			elif command in ["wipe", "reset"]:
 				if os.path.exists(SAVE_PATH):
 					choice = input(
-						"Really erase saved data and memories for this AI? "
+						"Are you sure you want to erase saved data and memories for this AI? "
 						"Type 'yes' to erase data, or anything else to cancel: "
 					)
 					if choice.strip().lower() == "yes":
@@ -606,20 +617,21 @@ def main():
 			else:
 				print(f"Invalid command '/{command}'")
 			continue
-	
+
 		print()
-		
+	
 		backup_ai = copy.deepcopy(ai)
 		try:
 			message = ai.send_message(msg, attached_image=attached_image)
 		except Exception as e:  # pylint: disable=W0718,C0103
 			ai = backup_ai  # Restore in case something changed before the error
 			traceback.print_exception(type(e), e, e.__traceback__)
-			print("An error occurred. Please try again in a moment.")
+			print()
 			print(
-				"If the issue persists, please open an issue on GitHub: " \
-				"https://github.com/fungamer2-2/HumanlikeAI/issues/new?template=bug_report.md"
+				f"{ai.config.name}: Oops! I seem to be having some trouble right now. 😟 "\
+				"Maybe try again in a few moments?"
 			)
+			
 		else:
 			print(f"{ai.config.name}: " + message)
 			ai.save(SAVE_PATH)

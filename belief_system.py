@@ -48,7 +48,7 @@ Belief: """
 
 class BeliefSystem:
 	"""The system that manages the AI's beliefs"""
-	model = MistralLLM("mistral-small-latest")
+	model = MistralLLM("mistral-medium-latest")
 	max_beliefs = 12
 
 	def __init__(self, config):
@@ -106,10 +106,12 @@ class BeliefSystem:
 
 	def generate_new_belief(self, memory, importance):
 		"""Generates a new belief given a memory."""
-		for _ in range(4):
+		try:
 			belief = self._generate_belief(memory, importance)
-			if not self._has_belief(belief) and self._add_belief(belief):
-				break
+		except Exception as e:
+			return
+		if not self._has_belief(belief):
+			self._add_belief(belief)
 
 	def _tick(self, dt):
 		for belief in self.beliefs:

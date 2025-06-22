@@ -93,7 +93,7 @@ class ThoughtSystem:
 		data.setdefault("possible_user_emotions", [])
 	
 		data.setdefault("emotion_intensity", 5)
-		data["emotion_intensity"] = int(data["emotion_intensity"])
+		data["emotion_intensity"] = max(1, min(10, int(data["emotion_intensity"])))
 	
 		data.setdefault("thoughts", [])
 		data.setdefault("emotion", "Neutral")
@@ -134,10 +134,10 @@ class ThoughtSystem:
 		img_data = None
 		if isinstance(content, list):
 			assert len(content) == 2
-			assert content[0]["type"] == "image_url"
-			assert content[1]["type"] == "text"
-			text_content = content[1]["text"] + "\n\n((The user attached an image to this message))"
-			img_data = content[0]
+			assert content[0]["type"] == "text"
+			assert content[1]["type"] == "image_url"
+			text_content = content[0]["text"] + "\n\n((The user attached an image to this message - please see the attached image.))"
+			img_data = content[1]
 		else:
 			text_content = content
 
@@ -196,10 +196,11 @@ class ThoughtSystem:
 		if self.show_thoughts:
 			print(f"{self.config.name}'s thoughts:")
 			for thought in data["thoughts"]:
-				print(f"- {thought}")
+				print(f"- {thought['content']}")
 			print()
 
-		thoughts_query = " ".join(data["thoughts"])
+		thoughts_query = " ".join(thought["content"] for thought in data["thoughts"])
+	
 		num_steps = 0
 		
 		# Let it continue thinking if necessary
@@ -227,11 +228,11 @@ class ThoughtSystem:
 				"role": "assistant",
 				"content": json.dumps(new_data, indent=4)
 			})
-			thoughts_query = " ".join(new_data["thoughts"])
+			thoughts_query = " ".join(thought["content"] for thought in new_data["thoughts"])
 	
 			if self.show_thoughts:
 				for thought in new_data["thoughts"]:
-					print(f"- {thought}")
+					print(f"- {thought['content']}")
 				print()
 
 			all_thoughts = data["thoughts"] + new_data["thoughts"]
@@ -244,8 +245,12 @@ class ThoughtSystem:
 			data["emotion"],
 			data["emotion_intensity"]
 		)
-		#print(f'{data["emotion"]}, {data["emotion_intensity"]}')
-#		print(data["emotion_reason"])
+		
+		if data["emotion"] != "Neutral":
+			print(f'{data["emotion"]}, {data["emotion_intensity"]}')
+			print("Reason:", data["emotion_reason"])
+			print("Influence:", data["emotion_influence"])
+			
 		relation_change = data["relationship_change"]
 		data["emotion_obj"] = emotion
 		

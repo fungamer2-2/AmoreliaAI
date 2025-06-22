@@ -84,8 +84,7 @@ class Memory:
 	def get_retention_prob(self):
 		"""Calculates the probability of retaining this memory per 24 hours"""
 		recency = self.get_recency_factor()
-		threshold = 0.6
-		if recency > threshold:
+		if recency > MEMORY_RECENCY_FORGET_THRESHOLD:
 			return 1.0
 		return math.exp(-1 / (MEMORY_DECAY_TIME_MULT * self.strength))
 
@@ -344,6 +343,8 @@ class LongTermMemory:
 
 	def add_memories(self, memories):
 		"""Adds a list of long-term memories"""
+		if not memories:
+			return
 		memory_texts = [mem.content for mem in memories]
 		embeddings = mistral_embed_texts(memory_texts)
 		for memory, embed in zip(memories, embeddings):
@@ -397,7 +398,7 @@ class MemorySystem:
 		self.short_term.add_memory(Memory(content, strength=strength, emotion=emotion))
 		self.importance_counter += importance / 10
 		#print(f"Importance: {importance}")
-		if not is_insight and importance >= 5:  # Important memories will create new beliefs
+		if not is_insight and importance >= 6:  # Important memories will create new beliefs
 			self.belief_system.generate_new_belief(content, importance/10)
 
 	def recall(self, query):
@@ -427,9 +428,7 @@ class MemorySystem:
 	def consolidate_memories(self):
 		"""Consilidates all short-term memories into long-term"""
 		print("Consolidating all memories...")
-		memories = self.short_term.get_memories()
-		for mem in memories:
-			mem.strength += 1
+		memories = self.short_term.get_memories()	
 		self.long_term.add_memories(memories)
 		self.short_term.clear_memories()
 		

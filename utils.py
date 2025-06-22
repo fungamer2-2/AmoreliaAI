@@ -2,13 +2,12 @@
 import re
 import os
 import time
+import base64
 from datetime import datetime
 
 import requests
 
 from colored import Style
-from llm import MistralLLM
-
 
 def clear_screen():
 	"""Clears the screen."""
@@ -151,6 +150,33 @@ def is_image_url(url):
 		)
 	except requests.RequestException:
 		return False
+		
+		
+def image_to_base64_url(path):
+	suffix = path.rpartition(".")[-1]
+	with open(path, "rb") as file:
+		encoded = base64.b64encode(file.read())
+	string = encoded.decode("utf-8")
+	url = f"data:image/{suffix};base64,{string}"
+	return url
+
+	
+def convert_img_schema_to_url(url):
+	if url.startswith("https://") or url.startswith("http://"):
+		if not is_image_url(url):
+			raise RuntimeError("Not a valid image url")
+		return url
+		
+	if url.startswith("file://"):
+		path = url.removeprefix("file://")
+		if not os.path.exists(path):
+			raise RuntimeError(f"File path '{path}' does not exist")
+		try:
+			return image_to_base64_url(path)
+		except Exception as e:
+			raise RuntimeError("Failed to load image file") from None
+	
+	raise RuntimeError("Supported schemas are https://, http://, and file://")
 
 
 def time_since_last_message_string(timestamp):
