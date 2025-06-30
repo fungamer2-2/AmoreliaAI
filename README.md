@@ -1,8 +1,8 @@
 # 💖 Amorelia: Your Friendly, Empathetic Virtual Companion
 
-![GitHub commit activity](https://img.shields.io/github/commit-activity/m/fungamer2-2/HumanlikeAI)
-![GitHub last commit](https://img.shields.io/github/last-commit/fungamer2-2/HumanlikeAI)
-![GitHub License](https://img.shields.io/github/license/fungamer2-2/HumanlikeAI)
+![GitHub commit activity](https://img.shields.io/github/commit-activity/m/fungamer2-2/AmoreliaAI)
+![GitHub last commit](https://img.shields.io/github/last-commit/fungamer2-2/AmoreliaAI)
+![GitHub License](https://img.shields.io/github/license/fungamer2-2/AmoreliaAI)
 
 
 Amorelia is a humanlike AI companion with thoughts, feelings, beliefs, and memories. Its goal is not simply to assist, but to truly form connections with users on a deeper level. 💖
