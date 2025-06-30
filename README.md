@@ -40,3 +40,7 @@ Amorelia also has a long-term memory system to recall relevant memories and insi
 6. Run `main.py`
 
 If you find a bug or have a feature request, feel free to [open an issue](https://github.com/fungamer2-2/HumanlikeAI/issues/new/choose)!
+
+## 📄 License
+
+AmoreliaAI is licensed under the [MIT License](LICENSE).
