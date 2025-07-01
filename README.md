@@ -5,7 +5,7 @@
 ![GitHub License](https://img.shields.io/github/license/fungamer2-2/AmoreliaAI)
 
 
-Amorelia is a humanlike AI companion with thoughts, feelings, beliefs, and memories. Its goal is not simply to assist, but to truly form connections with users on a deeper level. 💖
+Amorelia is a humanlike AI companion that doesn't just chat, but thinks, feels, and remembers. Its goal is not simply to assist, but to truly form connections with users on a deeper level. 💖
 
 Currently uses [Mistral AI](https://mistral.ai) models. To use this project, you'll need a Mistral AI API key, and store it under `MISTRAL_API_KEY` in a `.env` file.
 
@@ -13,15 +13,15 @@ Currently uses [Mistral AI](https://mistral.ai) models. To use this project, you
 
 Amorelia doesn't just respond, it takes some time to think before responding. These thoughts are treated as the AI's "inner monologue." This helps make it a bit more realistic, and think as if it truly had its own personality.
 
-For complex or nuanced queries, Amorelia may decide to engage in deeper thought and think for longer before responding.
+Amorelia can also adaptively decide to think for longer before responding, especially if the query is complex or nuanced.
 
 Periodically, Amorelia will reflect and gather insights to add to its memory, in order to gain a higher-level understanding of the user.
 
 ## 😊 Emotion system
 
-The emotion system is based on the PAD (Pleasure-Arousal-Dominance) state model. Interactions with Amorelia will elicit emotions, which affect its mood.
+Amorelia's emotion system is based on the PAD (Pleasure-Arousal-Dominance) state model. Interactions with Amorelia will elicit emotions, which affect its mood.
 
-Amorelia's mood is updated based on its emotions it experiences in the conversation. If no emotions have been invoked recently, its mood will gradually return to its baseline mood.
+Amorelia's mood changes based on emotions experiences in the conversation. If no emotions have been experienced recently, its mood will gradually return to its baseline mood.
 
 ## 📝 Memory system
 
