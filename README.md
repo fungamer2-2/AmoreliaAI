@@ -19,7 +19,7 @@ Periodically, Amorelia will reflect and gather insights to add to its memory, in
 
 ## 😊 Emotion system
 
-Amorelia's emotion system is based on the PAD (Pleasure-Arousal-Dominance) state model. Interactions with Amorelia will elicit emotions, which affect its mood.
+Amorelia has an emotion system, allowing it to feel. This system is based on the PAD (Pleasure-Arousal-Dominance) state model. When interacting with Amorelia, it will experience emotions, which influences its mood.
 
 Amorelia's mood changes based on emotions experiences in the conversation. If no emotions have been experienced recently, its mood will gradually return to its baseline mood.
 
