@@ -39,7 +39,7 @@ Amorelia also has a long-term memory system to recall relevant memories and insi
 5. Make sure to install the requirements: `pip install -r requirements.txt` 
 6. Run `main.py`
 
-If you find a bug or have a feature request, feel free to [open an issue](https://github.com/fungamer2-2/HumanlikeAI/issues/new/choose)!
+Feel free to [open an issue](https://github.com/fungamer2-2/HumanlikeAI/issues/new/choose) for any bugs or feature requests.
 
 ## 📄 License
 
