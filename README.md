@@ -5,9 +5,9 @@
 ![GitHub License](https://img.shields.io/github/license/fungamer2-2/AmoreliaAI)
 
 
-Amorelia is a humanlike AI companion that doesn't just chat, but thinks, feels, and remembers. It is designed to truly form connections with users on a deeper level. 💖
+Amorelia is a humanlike AI companion that can think, feel, and remember. It is designed to truly form connections with users on a deeper level. 💖
 
-Currently uses [Mistral AI](https://mistral.ai) models. To use this project, you'll need a Mistral AI API key, and store it under `MISTRAL_API_KEY` in a `.env` file.
+Currently uses [Mistral AI](https://mistral.ai) models. You'll need a Mistral AI API key to use this project, and store it under `MISTRAL_API_KEY` in a `.env` file.
 
 ## 💭 Thought system
 
