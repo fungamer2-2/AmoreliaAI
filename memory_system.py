@@ -43,7 +43,6 @@ def get_importance(memory):
 	try:
 		score = int(output)
 	except ValueError:
-		#print("Error parsing response to integer; returning default score 3/10.")
 		score = 3
 	
 	return max(1, min(score, 10))
@@ -98,7 +97,8 @@ class Memory:
 		timedelta = datetime.now() - self.timestamp
 		time_ago_str = get_approx_time_ago_str(timedelta)
 		
-		return f"<memory timestamp=\"{self.timestamp}\"" \
+		time_format = self.timestamp.strftime(f"%a, %-m/%-d/%Y, %-I:%M %p")
+		return f"<memory timestamp=\"{time_format}\"" \
 			f" time_ago=\"{time_ago_str}\">{self.content}</memory>"
 
 	def encode(self, embedding=None):
@@ -213,7 +213,7 @@ class LSHMemory:
 	
 		recency_vals = np.array([mem.get_recency_factor() for mem in memories])
 	
-		scores = sim_vals + recency_vals
+		scores = sim_vals + 0.5 * recency_vals
 	
 		idx = np.argpartition(scores, -k)[-k:]
 		idx = idx[np.argsort(scores[idx])[::-1]]
@@ -426,9 +426,9 @@ class MemorySystem:
 		self.belief_system.tick(dt)
 		
 	def consolidate_memories(self):
-		"""Consilidates all short-term memories into long-term"""
+		"""Consolidates all short-term memories into long-term"""
 		print("Consolidating all memories...")
-		memories = self.short_term.get_memories()	
+		memories = self.short_term.get_memories()
 		self.long_term.add_memories(memories)
 		self.short_term.clear_memories()
 		
@@ -441,7 +441,9 @@ class MemorySystem:
 		
 	def get_short_term_memories(self):
 		"""Gets a list of all short-term memories"""
-		return self.short_term.get_memories()
+		memories = self.short_term.get_memories()
+		memories.sort(key=lambda memory: memory.timestamp)
+		return memories
 		
 	def retrieve_long_term(self, query, top_k):
 		"""Retrieves the top K most relevant memories from long-term memory"""

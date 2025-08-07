@@ -11,6 +11,7 @@ from utils import (
 	time_since_last_message_string
 )
 from emotion_system import Emotion
+from colored import Fore, Style
 
 
 class ThoughtSystem:
@@ -36,8 +37,8 @@ class ThoughtSystem:
 	def can_reflect(self):
 		"""Determines whether the AI should reflect on its memories and gain insights."""
 		return (
-			self.memory_system.importance_counter >= 9
-			and (datetime.now() - self.last_reflection).total_seconds() > 3 * 3600
+			self.memory_system.importance_counter >= 10
+			and (datetime.now() - self.last_reflection).total_seconds() > 6 * 3600
 			and len(self.memory_system.get_short_term_memories()) >= 5
 		)
 		
@@ -98,7 +99,6 @@ class ThoughtSystem:
 		data.setdefault("thoughts", [])
 		data.setdefault("emotion", "Neutral")
 		data.setdefault("emotion_reason", "I feel this way based on how the conversation has been going.")
-		data.setdefault("emotion_influence", "I will make sure to express this emotion in my response.")
 		if data["emotion"] not in EMOTION_MAP:
 			for emotion in EMOTION_MAP:
 				if emotion.lower() == data["emotion"].lower():
@@ -117,7 +117,7 @@ class ThoughtSystem:
 			memories,
 			"You don't have any memories of this user yet!"
 		)
-
+		
 		memory_emotion = Emotion()
 		if recalled_memories:
 			# Add emotion influence from recalled memories
@@ -147,6 +147,16 @@ class ThoughtSystem:
 		else:
 			belief_str = "None"
 		
+		appraisal = self.emotion_system.appraisal(messages, memories, beliefs)
+		appraisal_str = ", ".join(
+			f"{emotion} (Intensity {round(intensity*100)}%)"
+			for emotion, intensity in appraisal
+			if intensity >= 0.1	
+		)
+		appraisal_hint = ""
+		if appraisal and appraisal_str:
+			appraisal_hint = f"[This event makes {self.config.name} feel: {appraisal_str}]"
+		
 		last_interaction = time_since_last_message_string(last_message)
 		prompt = THOUGHT_PROMPT.format(
 			name=self.config.name,
@@ -159,7 +169,8 @@ class ThoughtSystem:
 			memories=memories_str,
 			relationship_str=self.relation_system.get_string(),
 			beliefs=belief_str,
-			last_interaction=last_interaction
+			last_interaction=last_interaction,
+			appraisal_hint=appraisal_hint
 		)
 		prompt_content = prompt
 		if img_data:
@@ -177,13 +188,14 @@ class ThoughtSystem:
 		]
 		
 		data = {}
-		for _ in range(3):
+		for _ in range(5):
 			data = self.model.generate(
 				thought_history,
 				temperature=1.0,
 				return_json=True,
 				schema=THOUGHT_SCHEMA
 			)
+			
 			if data.get("thoughts", []):
 				break
 
@@ -194,10 +206,9 @@ class ThoughtSystem:
 		})
 
 		if self.show_thoughts:
-			print(f"{self.config.name}'s thoughts:")
+			print("Thinking:")
 			for thought in data["thoughts"]:
-				print(f"- {thought['content']}")
-			print()
+				print(Fore.magenta + thought['content'] + Style.reset)
 
 		thoughts_query = " ".join(thought["content"] for thought in data["thoughts"])
 	
@@ -231,29 +242,26 @@ class ThoughtSystem:
 			thoughts_query = " ".join(thought["content"] for thought in new_data["thoughts"])
 	
 			if self.show_thoughts:
-				for thought in new_data["thoughts"]:
-					print(f"- {thought['content']}")
 				print()
-
+				for thought in new_data["thoughts"]:
+					print(Fore.magenta + thought['content'] + Style.reset)
+		
 			all_thoughts = data["thoughts"] + new_data["thoughts"]
 			data = new_data.copy()
 			data["thoughts"] = all_thoughts
 			if num_steps >= MAX_THOUGHT_STEPS:
 				break
 
-		emotion = self.emotion_system.experience_emotion(
-			data["emotion"],
-			data["emotion_intensity"]
-		)
+		if not appraisal and data["emotion"] != "Neutral":
+			appraisal = [(data["emotion"], data["emotion_intensity"])]
 		
-		if data["emotion"] != "Neutral":
-			print(f'{data["emotion"]}, {data["emotion_intensity"]}')
-			print("Reason:", data["emotion_reason"])
-			print("Influence:", data["emotion_influence"])
-			
+		total_emotion = Emotion()	
+		for emotion, intensity in appraisal:
+			total_emotion += self.emotion_system.experience_emotion(emotion, intensity)
+		
 		relation_change = data["relationship_change"]
-		data["emotion_obj"] = emotion
-		
+		data["emotion"] = appraisal_hint
+		data["emotion_obj"] = total_emotion
 		self.relation_system.change_relationship(
 			relation_change.get("friendliness", 0.0),
 			relation_change.get("dominance", 0.0)

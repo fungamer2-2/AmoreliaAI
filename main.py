@@ -1,10 +1,11 @@
-#1"""The main module that runs the AI."""
+"""The main module that runs the AI."""
 
 import copy
 import os
 import traceback
 import json
 import pickle
+import requests
 from collections import deque
 from datetime import datetime
 
@@ -180,7 +181,8 @@ class AISystem:
 		self.relation_system = RelationshipSystem()
 		self.emotion_system = EmotionSystem(
 			self.personality_system,
-			self.relation_system
+			self.relation_system,
+			self.config
 		)
 	
 		self.thought_system = ThoughtSystem(
@@ -206,6 +208,7 @@ class AISystem:
 		self.memory_system.config = config
 		self.memory_system.belief_system.config = config
 		self.thought_system.config = config
+		self.emotion_system.config = config
 		personality = config.personality
 		self.personality_system = PersonalitySystem(
 			openness=personality.open,
@@ -284,7 +287,6 @@ class AISystem:
 			"ai_thoughts": thought_str,
 			"emotion": thought_data["emotion"],
 			"emotion_reason": thought_data["emotion_reason"],
-			"emotion_influence": thought_data["emotion_influence"],
 			"memories": format_memories_to_string(
 				memories,
 				"You don't have any memories of this user yet!"
@@ -322,8 +324,7 @@ class AISystem:
 		history = self.get_message_history()
 
 		memories, recalled_memories = self.memory_system.recall_memories(history)
-		memories.sort(key=lambda memory: memory.timestamp)
-
+		
 		thought_data = self.thought_system.think(
 			self.get_message_history(False),
 			memories,
@@ -358,7 +359,6 @@ class AISystem:
 			history,
 			temperature=1.0,
 			presence_penalty=1.0,
-			frequency_penalty=0.5,
 			max_tokens=2048,
 			return_json=return_json
 		)
@@ -407,8 +407,13 @@ class AISystem:
 		)
 		
 	def get_memories(self):
+		"""Gets the short-term memories."""
 		return self.memory_system.get_short_term_memories()
 
+	def consolidate_memories(self):
+		"""Consolidates short-term memories into long-term."""
+		self.memory_system.consolidate_memories()	
+	
 	def tick(self):
 		"""Runs a tick to update the AI's systems"""
 		now = datetime.now()
@@ -433,6 +438,7 @@ class AISystem:
 	def load(path):
 		"""Loads the AI system from the path. Returns None if it doesn't exist."""
 		if os.path.exists(path):
+			print("Loading Amorelia...")
 			with open(path, "rb") as file:
 				return pickle.load(file)
 		else:
@@ -442,13 +448,17 @@ class AISystem:
 	def load_or_create(cls, path):
 		"""Loads the AI system from the path, or creates it if it doesn't exist."""
 		ai_system = cls.load(path)
-		if ai_system is None:
+		is_new = ai_system is None
+		if is_new:
+			print("Initializing Amorelia...")
 			ai_system = AISystem()
-			print("AI system initialized.")
+			print("Amorelia initialized.")
 		else:
-			print("AI loaded.")
+			print("Amorelia loaded.")
 	
 		ai_system.on_startup()
+		if is_new:
+			print(ai_system.send_message("*User logs in for the first time. Greet them warmly and make sure to introduce yourself, but keep it brief.*"))
 		return ai_system
 
 
@@ -562,9 +572,9 @@ def main():
 			elif command == "hide_thoughts":
 				ai.set_thought_visibility(False)
 			elif command == "reset_mood":
-				ai.emotion_system.reset_mood()
+				ai.set_mood()
 			elif command == "consolidate_memories":
-				ai.memory_system.consolidate_memories()
+				ai.consolidate_memories()
 			elif command == "attach_image" and len(args) == 1:
 				url = args[0]
 				if not isinstance(url, str):
@@ -581,14 +591,11 @@ def main():
 					print(memory.format_memory())
 			elif command == "suggest":
 				history = ai.get_message_history(False)
-				if True or history:
-					print("Suggesting possible user responses...")
-					possible_responses = suggest_responses(history)
-					print("Possible responses:")
-					for response in possible_responses:
-						print("- " + response)
-				else:
-					print("You need to have sent at least one message before you can use this command")
+				print("Suggesting possible user responses...")
+				possible_responses = suggest_responses(history)
+				print("Possible responses:")
+				for response in possible_responses:
+					print("- " + response)
 			elif command in ["wipe", "reset"]:
 				if os.path.exists(SAVE_PATH):
 					choice = input(
@@ -619,7 +626,7 @@ def main():
 			continue
 
 		print()
-	
+
 		backup_ai = copy.deepcopy(ai)
 		try:
 			message = ai.send_message(msg, attached_image=attached_image)

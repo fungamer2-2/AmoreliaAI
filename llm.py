@@ -1,8 +1,9 @@
 import os
-import requests
 import json
-import json_repair
 import time
+
+import requests
+import json_repair
 from dotenv import load_dotenv
 
 load_dotenv(".env")
@@ -34,7 +35,10 @@ def mistral_request(messages, model, **kwargs):
 			#print(f"Waiting {wait_time} second(s)...")
 			time.sleep(wait_time)
 		else:
-			print(response.text)
+			print("An error occured")
+			obj = response.json()
+			#print(response.text)
+			print(obj["message"])
 			response.raise_for_status()
 	else:
 		print(response.text)
@@ -54,7 +58,7 @@ def mistral_embed_texts(inputs):
 	data = {
 		"model": "mistral-embed",
 		"input": inputs
-	}	
+	}
 	max_delay = 20
 	for tries in range(4):
 		response = requests.post(MISTRAL_API_EMBED_URL, json=data, headers=headers, timeout=30)
@@ -65,7 +69,10 @@ def mistral_embed_texts(inputs):
 			#print(f"Waiting {wait_time} second(s)...")
 			time.sleep(wait_time)
 		else:
-			print(response.text)
+			print("An error occured")
+			obj = response.json()
+			#print(response.text)
+			print(obj["message"])
 			response.raise_for_status()
 	else:
 		print(response.text)
@@ -92,7 +99,7 @@ def _convert_system_to_user(messages):
 class MistralLLM:
 	"""Class representing a model from the Mistral AI API"""
 
-	def __init__(self, model="mistral-medium-latest"):
+	def __init__(self, model="mistral-large-latest"):
 		self.model = model
 
 	def _parse_json(self, response):
@@ -105,7 +112,7 @@ class MistralLLM:
 			return json.loads(response, strict=False)
 		except json.JSONDecodeError:
 			return json_repair.loads(response, skip_json_loads=True)
-	
+
 	def generate(
 		self,
 		prompt,
@@ -114,6 +121,7 @@ class MistralLLM:
 		n=None,
 		**kwargs
 	):
+		"""Generates a response to the prompt by calling the API."""
 		if schema and not return_json:
 			raise ValueError("return_json must be True if schema is provided")
 		if isinstance(prompt, str):
@@ -125,18 +133,18 @@ class MistralLLM:
 			"mistral-large-latest"
 		]:
 			prompt = _convert_system_to_user(prompt)
-		
+
 		if schema:
 			format = {
 				"type":"json_schema",
 				"json_schema":{
-					"name": "json_format",
+					"name": "json_object",
 					"schema": schema,
 					"strict": True
 				}
 			}
 		else:
-			format = {"type":"json_object"} if return_json else {"type":"text"} 
+			format = {"type":"json_object"} if return_json else {"type":"text"}
 		response = mistral_request(
 			prompt,
 			**kwargs,
@@ -144,16 +152,16 @@ class MistralLLM:
 			model=self.model,
 			response_format=format
 		)
-		
+		#print(response)
 		if n:
 			response = [r["message"]["content"] for r in response["choices"]]
 			if return_json:
-				return [self._parse_json(r) for r in response]			
+				return [self._parse_json(r) for r in response]
 		else:
 			response = response["choices"][0]["message"]["content"]
-		
+			
 			if return_json:
 				return self._parse_json(response)
-			
+	
 		return response
 			

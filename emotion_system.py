@@ -12,9 +12,17 @@ from const import (
 	PERSONALITY_INTENSITY_FACTOR,
 	MOOD_HALF_LIFE,
 	EMOTION_HALF_LIFE,
-	MOOD_CHANGE_VEL
+	MOOD_CHANGE_VEL,
+	APPRAISAL_PROMPT,
+	EMOTION_APPRAISAL_CONTEXT_TEMPLATE,
+	APPRAISAL_SCHEMA
 )
-from utils import num_to_str_sign, val_to_symbol_color
+from utils import (
+	num_to_str_sign,
+	val_to_symbol_color,
+	format_memories_to_string,
+	conversation_to_string
+)
 from llm import MistralLLM
 from colored import Fore
 
@@ -169,9 +177,6 @@ class Emotion:
 			+ self.arousal * other.arousal
 			+ self.dominance * other.dominance
 		)
-		
-	def cosine_sim(self, other):
-		return self.dot(other) / (self.get_norm() * other.get_norm() + 1e-7)
 
 	def get_intensity(self):
 		"""Gets the intensity of the emotion"""
@@ -272,9 +277,9 @@ class RelationshipSystem:
 		"""Disays the relationship values."""
 		print("Relationship:")
 		print("-------------")
-		string = val_to_symbol_color(self.friendliness, 20, Fore.green, Fore.red, val_scale=100)
+		string = val_to_symbol_color(self.friendliness, 10, Fore.green, Fore.red, val_scale=100)
 		print(f"Friendliness: {string}")
-		string = val_to_symbol_color(self.dominance, 20, Fore.cyan, Fore.light_magenta, val_scale=100)
+		string = val_to_symbol_color(self.dominance, 10, Fore.cyan, Fore.light_magenta, val_scale=100)
 		print(f"Dominance:    {string}")
 	
 	def get_string(self):
@@ -290,7 +295,8 @@ class EmotionSystem:
 	def __init__(
 		self,
 		personality_system,
-		relation_system
+		relation_system,
+		config
 	):
 		base_mood = Emotion.from_personality(
 			personality_system.open,
@@ -304,8 +310,118 @@ class EmotionSystem:
 		self.base_mood = base_mood
 		self.mood = self.get_base_mood()
 		self.last_update = time.time()
+		self.config = config
 		self.emotions = []
+		
+	def _emotions_from_appraisal(self, appraisal):
+		events = appraisal["events"]
+		actions = appraisal["actions"]
+		
+		self_event = events["self"]
+		other_event = events["other"]
+		
+		is_prospect = self_event["is_prospective"]
 	
+		relation = self.relation.friendliness
+		agreeable = self.personality_system.agreeable*100
+		
+		eff_relation = (agreeable + relation) / 2
+		
+		emotions = []
+		if self_event["event"] and self_event["desirability"] != 0:
+			desirability = self_event["desirability"]	
+			intensity = abs(desirability) / 100
+			if desirability > 0:
+				emotion = "Hope" if is_prospect else "Joy"
+			else:	
+				emotion = "Fear" if is_prospect else "Distress"
+			
+			emotions.append((emotion, intensity))
+			
+		if other_event["event"] and other_event["desirability"] != 0:
+			desirability = other_event["desirability"]
+			relation_mod = math.sqrt(abs(eff_relation)/100)
+			intensity = relation_mod * abs(desirability)/100
+			if desirability > 0:
+				emotion = "HappyFor" if eff_relation >= 0 else "Resentment"
+			else:
+				emotion = "Pity" if eff_relation >= 0 else "Gloating"
+			emotions.append((emotion, intensity))
+		
+		self_act = actions["self"]
+		other_act = actions["other"]
+		
+		if self_act["action"] and self_act["praiseworthiness"] != 0:
+			praiseworthiness = self_act["praiseworthiness"]
+			intensity = abs(praiseworthiness) / 100
+			if praiseworthiness > 0:
+				emotions.append(("Pride", intensity))
+			else:
+				emotions.append(("Shame", intensity))
+			
+		if other_act["action"] and other_act["praiseworthiness"] != 0:
+			praiseworthiness = other_act["praiseworthiness"]
+			intensity = abs(praiseworthiness) / 100	
+			if praiseworthiness > 0:
+				emotions.append(("Admiration", intensity))
+			else:
+				emotions.append(("Reproach", intensity))
+	
+		emotions.sort(key=lambda p: p[1], reverse=True)
+		return emotions
+		
+	def appraisal(self, messages, memories, beliefs):
+		memories_str = format_memories_to_string(memories, "None")
+		sys_prompt = APPRAISAL_PROMPT.format(
+			sys_prompt=self.config.system_prompt
+		)
+		if beliefs:
+			belief_str = "\n".join(f"- {belief}" for belief in beliefs)
+		else:
+			belief_str = "None"
+		
+		content = messages[-1]["content"]
+
+		img_data = None
+		if isinstance(content, list):
+			assert len(content) == 2
+			assert content[0]["type"] == "text"
+			assert content[1]["type"] == "image_url"
+			text_content = content[0]["text"] + "\n\n((The user attached an image to this message - please see the attached image.))"
+			img_data = content[1]
+		else:
+			text_content = content
+			
+		prompt = EMOTION_APPRAISAL_CONTEXT_TEMPLATE.format(
+			memories=memories_str,
+			history=conversation_to_string(messages),
+			beliefs=belief_str,
+			user_input=text_content
+		)
+		prompt_content = prompt
+		if img_data:
+			prompt_content = [
+				{"type":"text", "text":prompt_content},
+				img_data
+			]
+			
+		history = [
+			{"role":"system", "content":sys_prompt},
+			{"role":"user", "content":"[BEGIN MESSAGE HISTORY]"},
+			*messages[:-1],
+			{"role":"user", "content":"[END MESSAGE HISTORY]"},
+			{"role":"user", "content":prompt_content}
+		]
+		
+		model = MistralLLM()
+		emotion_data = model.generate(
+			history,
+			temperature=0.2,
+			schema=APPRAISAL_SCHEMA,
+			return_json=True
+		)
+		return self._emotions_from_appraisal(emotion_data)
+		
 	def set_emotion(
 		self,
 		pleasure=None,
@@ -501,11 +617,7 @@ class EmotionSystem:
 		return base_mood
 
 	def _tick_mood_decay(self, t):
-		half_life = MOOD_HALF_LIFE
-		alignment = self.mood.cosine_sim(self.get_base_mood())
-		half_life *= 2**alignment 
-		
-		r = 0.5 ** (t / half_life)
+		r = 0.5 ** (t / MOOD_HALF_LIFE)
 		
 		self.mood += (self.get_base_mood() - self.mood) * (1 - r)
 
@@ -517,8 +629,8 @@ class EmotionSystem:
 		self.last_update = time.time()
 		t = dt
 		while t > 0:
-			step = min(t, 1.0)	
-			self._apply_mood_noise(step/2)
+			step = min(t, 1.0)
+			self._apply_mood_noise(step)
 			if not self._tick_emotion_change(step):
 				break
 			t -= step
@@ -542,18 +654,3 @@ class EmotionSystem:
 		self.mood.clamp()
 		
 		
-if __name__ == "__main__":
-	
-	personality = PersonalitySystem(
-		openness=0,
-		conscientious=0,
-		extrovert=0,
-		agreeable=0,
-		neurotic=0
-	)
-	sys = EmotionSystem(personality, RelationshipSystem())
-	sys.experience_emotion("Fear", 10)
-	print(sys.mood)
-	while sys.emotions:
-		sys.tick(1)
-		print(sys.mood)
