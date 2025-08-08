@@ -99,7 +99,7 @@ def _convert_system_to_user(messages):
 class MistralLLM:
 	"""Class representing a model from the Mistral AI API"""
 
-	def __init__(self, model="mistral-large-latest"):
+	def __init__(self, model="mistral-medium-latest"):
 		self.model = model
 
 	def _parse_json(self, response):
