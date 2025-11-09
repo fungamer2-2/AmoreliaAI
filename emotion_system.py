@@ -23,7 +23,7 @@ from utils import (
 	format_memories_to_string,
 	conversation_to_string
 )
-from llm import MistralLLM
+from llm import MistralLLM, FallbackMistralLLM
 from colored import Fore
 
 
@@ -38,17 +38,26 @@ def get_default_mood(openness, conscientious, extrovert, agreeable, neurotic):
 
 def summarize_personality(openness, conscientious, extrovert, agreeable, neurotic):
 	"""Summarizes the personality values into a natural language personality description."""
-	model = MistralLLM("mistral-medium-latest")
+	model = FallbackMistralLLM()
+	
+	# Rescale values from the -1.0 to +1.0 range to the 0 to 100 range
+	open_scaled = (openness + 1) * 50
+	conscientious_scaled = (conscientious + 1) * 50
+	extrovert_scaled = (extrovert + 1) * 50
+	agreeable_scaled = (agreeable + 1) * 50
+	stability_scaled = (1 - neurotic) * 50
+	
 	personality_str = "\n".join([
-		f"Openness: {num_to_str_sign(openness, 2)}",
-		f"Conscientiousness: {num_to_str_sign(conscientious, 2)}",
-		f"Extroversion: {num_to_str_sign(extrovert, 2)}",
-		f"Agreeableness: {num_to_str_sign(agreeable, 2)}",
-		f"Neuroticism: {num_to_str_sign(neurotic, 2)}"
+		f"Openness: {round(open_scaled)}/100",
+		f"Conscientiousness: {round(conscientious_scaled)}/100",
+		f"Extroversion: {round(extrovert_scaled)}/100",
+		f"Agreeableness: {round(agreeable_scaled)}/100",
+		f"Emotional Stability: {round(stability_scaled)}/100"
 	])
 	prompt = SUMMARIZE_PERSONALITY.format(
 		personality_values=personality_str
 	)
+	#print(prompt)
 	return model.generate(
 		prompt,
 		temperature=0.1
@@ -180,7 +189,7 @@ class Emotion:
 
 	def get_intensity(self):
 		"""Gets the intensity of the emotion"""
-		return math.sqrt(self.pleasure**2 + self.arousal ** 2 + self.dominance**2)
+		return math.sqrt(self.pleasure**2 + self.arousal ** 2 + self.dominance**2) / math.sqrt(3)
 
 	def distance(self, other):
 		"""Returns the distance between two emotions"""
@@ -223,8 +232,7 @@ class Emotion:
 
 class RelationshipSystem:
 	"""The system that manages the AI's relationship with the user."""
-	relation_change_mult = 1.7
-
+	
 	def __init__(self):
 		self.friendliness = 0.0
 		self.dominance = 0.0
@@ -260,8 +268,6 @@ class RelationshipSystem:
 		
 	def change_relationship(self, friendliness, dominance):
 		"""Adjusts the relationship values."""
-		friendliness *= self.relation_change_mult
-		dominance *= self.relation_change_mult
 		
 		if (friendliness > 0) == (self.friendliness > 0):
 			friendliness *= 1 - abs(self.friendliness) / 100
@@ -277,9 +283,9 @@ class RelationshipSystem:
 		"""Disays the relationship values."""
 		print("Relationship:")
 		print("-------------")
-		string = val_to_symbol_color(self.friendliness, 10, Fore.green, Fore.red, val_scale=100)
+		string = val_to_symbol_color(self.friendliness, 20, Fore.green, Fore.red, val_scale=100)
 		print(f"Friendliness: {string}")
-		string = val_to_symbol_color(self.dominance, 10, Fore.cyan, Fore.light_magenta, val_scale=100)
+		string = val_to_symbol_color(self.dominance, 20, Fore.cyan, Fore.light_magenta, val_scale=100)
 		print(f"Dominance:    {string}")
 	
 	def get_string(self):
@@ -311,7 +317,6 @@ class EmotionSystem:
 		self.mood = self.get_base_mood()
 		self.last_update = time.time()
 		self.config = config
-		self.emotions = []
 		
 	def _emotions_from_appraisal(self, appraisal):
 		events = appraisal["events"]
@@ -322,8 +327,8 @@ class EmotionSystem:
 		
 		is_prospect = self_event["is_prospective"]
 	
-		relation = self.relation.friendliness
-		agreeable = self.personality_system.agreeable*100
+		relation = self.relation.friendliness  # 0-100
+		agreeable = self.personality_system.agreeable*100  # Multiply by 100 to map this from 0-1 to 0-100
 		
 		eff_relation = (agreeable + relation) / 2
 		
@@ -368,6 +373,7 @@ class EmotionSystem:
 				emotions.append(("Reproach", intensity))
 	
 		emotions.sort(key=lambda p: p[1], reverse=True)
+		#print(emotions)
 		return emotions
 		
 	def appraisal(self, messages, memories, beliefs):
@@ -413,7 +419,7 @@ class EmotionSystem:
 			{"role":"user", "content":prompt_content}
 		]
 		
-		model = MistralLLM()
+		model = FallbackMistralLLM()
 		emotion_data = model.generate(
 			history,
 			temperature=0.2,
@@ -488,11 +494,11 @@ class EmotionSystem:
 		mood = self.mood
 		print("Mood:")
 		print("--------")
-		string = val_to_symbol_color(mood.pleasure, 10, Fore.green, Fore.red)
+		string = val_to_symbol_color(mood.pleasure, 20, Fore.green, Fore.red)
 		print(f"Pleasure:  {string}")
-		string = val_to_symbol_color(mood.arousal, 10, Fore.yellow, Fore.cornflower_blue)
+		string = val_to_symbol_color(mood.arousal, 20, Fore.yellow, Fore.cornflower_blue)
 		print(f"Arousal:   {string}")
-		string = val_to_symbol_color(mood.dominance, 10, Fore.cyan, Fore.light_magenta)
+		string = val_to_symbol_color(mood.dominance, 20, Fore.cyan, Fore.light_magenta)
 		print(f"Dominance: {string}")
 		print()
 		self.relation.print_relation()
@@ -518,12 +524,8 @@ class EmotionSystem:
 		mood_name = self.get_mood_name()
 		if mood_name != "neutral":
 			mood = self.mood
-			if mood.get_intensity() > 1.0:
-				mood_name = "fully " + mood_name
-			elif mood.get_intensity() > 0.5:
-				mood_name = "moderately " + mood_name
-			else:
-				mood_name = "slightly " + mood_name
+			adv = self._get_adv(mood.get_intensity())
+			mood_name = adv + " " + mood_name
 		
 		return mood_name
 
@@ -533,7 +535,7 @@ class EmotionSystem:
 		return f"{mood_desc} - {prompt}"
 
 	def experience_emotion(self, name, intensity):
-		intensity /= 10
+		#intensity /= 10
 		emotion = Emotion(*EMOTION_MAP[name])
 		emotion.pleasure *= random.triangular(0.9, 1.1)
 		emotion.arousal *= random.triangular(0.9, 1.1)
@@ -548,58 +550,20 @@ class EmotionSystem:
 		)
 		intensity *= 1.0 + intensity_mod
 		intensity = max(0.05, intensity)
-		#print(f"Intensity {intensity}")
+		
 		self.relation.on_emotion(name, intensity)
 		emotion *= intensity
-		self.add_emotion(emotion)
+		self.mood += emotion
 		return emotion
 		
-	def add_emotion(self, emotion):
-		self.emotions.append(emotion)
-
-	def _tick_emotion_change(self, t):
-		new_emotions = []
-		emotion_center = Emotion()
-		for emotion in self.emotions:
-			half_life = EMOTION_HALF_LIFE
-			emotion_decay = 0.5 ** (t / half_life)
-			emotion *= emotion_decay
-			if emotion.get_intensity() >= 0.01:
-				new_emotions.append(emotion)
-				emotion_center += emotion
-		
-		self.emotions = new_emotions
-		if self.emotions:
-			emotion_center /= len(self.emotions)
-			
-			max_intensity = max(em.get_intensity() for em in self.emotions)
-			total_intensity = sum(em.get_intensity() for em in self.emotions)
-		
-			v = MOOD_CHANGE_VEL * total_intensity / max_intensity
-			
-			if emotion_center.distance(self.mood) < 0.005:
-				self.mood = emotion_center.copy()
-			
-			if (
-				emotion_center.get_intensity() < self.mood.get_intensity()
-				#and emotion_center.is_same_octant(self.mood)
-			):
-				delta = emotion_center  # Push phase
-			else:
-				delta = emotion_center - self.mood  # Pull phase
-			self.mood += t * v * delta
-			self.mood.clamp()
-			return True
-		return False
+	def clamp_mood(self):
+		self.mood.clamp()
 			
 	def get_base_mood(self):
 		now = datetime.now()
 		hour = now.hour + now.minute / 60 + now.second / 3600
 		
-		# The energy level is likely to be higher during the day and lower at nighttime
-		shift = 2
-		
-		energy_cycle = -math.cos(math.pi * (hour - shift) / 12)
+		energy_cycle = -math.cos(math.pi * hour / 12)
 		base_mood = self.base_mood.copy()
 		
 		if energy_cycle > 0:
@@ -628,15 +592,7 @@ class EmotionSystem:
 		self.relation.tick(dt)
 		self.last_update = time.time()
 		t = dt
-		while t > 0:
-			step = min(t, 1.0)
-			self._apply_mood_noise(step)
-			if not self._tick_emotion_change(step):
-				break
-			t -= step
-		if t <= 0:
-			return
-	
+		
 		substep = max(1, min(t / 10, 30))
 		while t > 0:
 			step = min(t, substep)
@@ -654,3 +610,14 @@ class EmotionSystem:
 		self.mood.clamp()
 		
 		
+if __name__ == "__main__":
+	kwargs = dict(
+		openness=0.35,
+		conscientious=0.22,
+		extrovert=0.18,
+		agreeable=0.93,
+		neurotic=-0.1,
+	)
+	print(get_default_mood(**kwargs))
+	print(summarize_personality(**kwargs))
+	

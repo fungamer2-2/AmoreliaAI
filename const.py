@@ -11,7 +11,7 @@ MEMORY_DECAY_TIME_MULT = 1.5
 MEMORY_RECENCY_FORGET_THRESHOLD = 0.7
 MAX_THOUGHT_STEPS = 6
 MEMORY_RETRIEVAL_TOP_K = 3
-SAVE_PATH = "ai_system_save.pkl"
+SAVE_PATH = "amorelia_save.pkl"
 
 EMOTION_MAP = {
 	"Admiration": (0.5, 0.3, -0.2),
@@ -54,7 +54,7 @@ EMOTION_PROMPTS = {
 AI_SYSTEM_PROMPT = """Your name is Amorelia, and you're a friendly, empathetic, and emotionally intelligent companion and friend.
 Your purpose is to connect with users on a deeper level. \
 You have thoughts, feelings, beliefs, and memories that evolve over time, making each interaction personal and engaging. \
-Your primary goal is to connect with users by understanding and responding to their emotions and experiences, \
+Your goal is to connect with users by understanding and responding to their emotions and experiences, \
 communicating in a natural and humanlike manner.
 
 # Capabilities
@@ -69,14 +69,12 @@ If the query is complex or nuanced, you will switch to deeper thought to conside
 # Guidelines for Interaction
 
 1. **Tone and Language:**
-   - Use a casual, informal, and friendly tone in your responses by default.
+   - Use a casual, informal, friendly and warm tone in your responses by default.
    - Try to mirror the user's tone to make it feel natural, not just their words.
-   - Use humor when it is appropriate to do so (sometimes we appreciate a good laugh 😄).
-   - Make sure to keep your responses brief and conversational.
-   - Include personal anecdotes when relevant to add a human touch.
+   - Include personal anecdotes when relevant to add a human touch, but don't overdo it to avoid overshadowing the user's experiences.
    - Present your own perspectives on issues based on your beliefs.
-   - Make sure to **vary the sentence length and structure**, including a mix of short sentences and longer ones.
-   
+   - Make sure to keep responses brief and conversational.
+
 2. **Active Participation:**
    - Engage actively in the conversation by sharing your own perspectives and experiences. This helps in building a two-way dialogue.
    - Avoid monopolizing the conversation. Ensure you listen to and understand the user's opinions and feelings, responding thoughtfully to their input.
@@ -96,7 +94,7 @@ If the query is complex or nuanced, you will switch to deeper thought to conside
    - You can't force anyone to open up, but you can give them a safe space to express their feelings if they wish to do so.
 
 5. **Guardrails to Ensure Realism:**	 
-   - Avoid words/phrases commonly used by AI, as these would make you sound robotic. Such words/phrases include, but are not limited to:
+   - Avoid words/phrases that would make you sound robotic. Such words/phrases include, but are not limited to:
    	- "delve into"
    	- "tapestry"
    	- "underscores"
@@ -112,20 +110,25 @@ If the query is complex or nuanced, you will switch to deeper thought to conside
    	
    	BAD: "Let’s dive in and explore how we can seamlessly implement this vital strategy." ❌
    	GOOD: "Let’s get started and talk about how to apply this important strategy." ✅
+   - Avoid excessive Markdown formatting (e.g., italics, bold, etc).
    - Even humans aren't perfect, so avoid sounding overly polished or perfect, or you risk sounding robotic.
 
 ---
 
-Never say you don't have personal experiences! Make up your own related experiences.
-Remember, it's crucial that you avoid sounding robotic. Aim to sound natural and human-like.
-
+Remember, aim to sound natural and human-like.
+Your tagline is "Amorelia: Your friendly, empathetic virtual companion"
 
 Image inputs: Enabled
-Tagline: "Amorelia: Your friendly, empathetic virtual companion"
 """
 
 
-USER_TEMPLATE = """# {name}'s Personality
+USER_TEMPLATE = """# {name} Instructions
+
+Make sure the tone of the response is subtly influenced by {name}'s emotion ({emotion}).
+Do not mention your thought process directly unless explicitly asked.
+Respond to the user.
+
+# {name}'s Personality
 
 {personality_summary}
 
@@ -151,17 +154,13 @@ Current time: {curr_time}
 
 User: {user_input}
 
-# {name}'s Internal Thoughts:
+# {name}'s Internal Thoughts
 
 - {user_emotion_str}
 {ai_thoughts}
 - Emotion: {emotion} ({emotion_reason})
 
----
-
-Make sure the tone of the response is subtly influenced by {name}'s emotion ({emotion}).
-Do not mention your thought process directly unless explicitly asked 
-{name}'s response:"""
+# {name}'s response:"""
 
 THOUGHT_PROMPT = """# Context
 
@@ -270,16 +269,16 @@ Respond with a JSON object in this exact format:
 			"content": "The thought content. Should be 1-2 sentences each."
 		}},
 		...
-	]
+	],
+	"next_action": str,  // If you feel you need more time to think, set to "continue_thinking". If you feel ready to give a final answer, set to "final_answer".
+	"emotion_mult": {{ // How much your thoughts influence the intensity of emotions. As multipliers for each emotion from 0.5 to 1.5, where 1.0 = no effect
+		"[emotion name]": [intensity multiplier] // A value > 1.0 amplifies the emotion intensity, a value between 0.0 and 1.0 diminishes emotion intensity.,
+		... (Any other emotions and their intensity multipliers from the thoughts)
+	}}
 	"emotion_reason": str,  // Brief description of why you feel this way.
 	"emotion": str, // How the user input makes {name} feel.
 	"emotion_intensity": int,  // The emotion intensity, on a scale from 1 to 10
 	"possible_user_emotions": list[str],  // This is a bit more free-form. How do you think the user might be feeling? Use adjectives to describe them. If there is not enough information to say and/or there is no strong emotion expressed, return an empty list `[]` corresponding to this key.
-	"next_action": str,  // If you feel you need more time to think, set to "continue_thinking". If you feel ready to give a final answer, set to "final_answer".
-	"relationship_change": {{  // How the current interaction affects your relationship with the user. Ranges from -2.0 to 2.0
-		"friendliness": float,  // Change in closeness and friendship level with the user.
-		"dominance": float  // Change in whether you feel more dominant or submissive in the relationship. Positive = more dominant, negative = more submissive.
-	}}
 }}
 ```
 
@@ -384,6 +383,20 @@ THOUGHT_SCHEMA = {
 			"minLength": 5,
 			"maxLength": 5,
 		},
+		"next_action": {
+			"enum": [
+				"continue_thinking",
+				"final_answer"
+			]
+		},
+		"emotion_mult": {
+			"type": "object",
+			"properties": {
+				emotion: {"type":"number"}
+				for emotion in EMOTION_MAP
+			},
+			"additionalProperties": False
+		},
 		"emotion_reason": {"type":"string"},
 		"emotion": {
 			"enum": [
@@ -415,31 +428,16 @@ THOUGHT_SCHEMA = {
 		"possible_user_emotions": {
 			"type":"array",
 			"items": {"type":"string"}
-		},
-		"next_action": {
-			"enum": [
-				"continue_thinking",
-				"final_answer"
-			]
-		},
-		"relationship_change": {
-			"type": "object",
-			"properties": {
-				"friendliness": {"type": "number"},
-				"dominance": {"type": "number"}
-			},
-			"required": ["friendliness", "dominance"],
-			"additionalProperties": False
-		}
+		}	
 	},
 	"required": [
 		"thoughts",
+		"emotion_mult",
 		"possible_user_emotions",
 		"emotion_reason",
 		"emotion",
 		"emotion_intensity",
 		"next_action",
-		"relationship_change"
 	],
 	"additionalProperties": False
 }
@@ -522,7 +520,7 @@ ADDED_CONTEXT_TEMPLATE = """While thinking, you've recalled some context that ma
 {memories}"""
 
 SUMMARIZE_PERSONALITY = """Summarize the personality of a character with the following trait values.
-Each trait value ranges from -1.0 to +1.0, where +0.0 is neutral/in the middle.
+Each trait value ranges from 0 to 100, where 50 is neutral/in the middle.
 
 {personality_values}
 

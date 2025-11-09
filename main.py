@@ -11,7 +11,7 @@ from datetime import datetime
 
 from colored import Fore, Style
 from pydantic import BaseModel, Field
-from llm import MistralLLM
+from llm import MistralLLM, FallbackMistralLLM
 from utils import (
 	clear_screen,
 	is_image_url,
@@ -153,11 +153,11 @@ class AIConfig(BaseModel):
 	)
 	personality: PersonalityConfig = Field(
 		default_factory=lambda: PersonalityConfig(
-			open=0.45,
-			conscientious=0.25,
+			open=0.35,
+			conscientious=0.22,
 			extrovert=0.18,
 			agreeable=0.93,
-			neurotic=-0.05
+			neurotic=-0.1
 		)
 	)
 
@@ -193,7 +193,7 @@ class AISystem:
 			self.personality_system
 		)
 
-		self.model = MistralLLM()
+		self.model = FallbackMistralLLM()
 
 		self.num_messages = 0
 		self.last_message = None
@@ -354,11 +354,10 @@ class AISystem:
 			]
 
 		history[-1]["content"] = prompt_content
-		
+
 		response = self.model.generate(
 			history,
-			temperature=1.0,
-			presence_penalty=1.0,
+			temperature=0.8,
 			max_tokens=2048,
 			return_json=return_json
 		)
@@ -514,12 +513,40 @@ def command_parse(string):
 	args = remaining
 	return command, _parse_args(args)
 	
+	
+def check_has_valid_key():
+	if not os.getenv("MISTRAL_API_KEY"):
+		print("You need an API key to use Amorelia AI.")
+		print(
+			"Create a .env file in the same directory as this project, " +
+			"then write MISTRAL_API_KEY=\"[your api key here]\" in the file."
+		)
+		return False
+	
+	print("Checking API key...")
+	model = MistralLLM("mistral-medium-2505")
+	try:
+		model.generate("Hello", max_tokens=1)
+	except requests.HTTPError as e:
+		if e.response.status_code == 401:
+			print("The API key provided is invalid. Please check the key in .env and rerun the program.")
+		elif e.response.status_code == 429:
+			print("Oops! Look's like the server is under high load right now. Please try again later.")
+		else:
+			print("Oops! We're having some connection issues right now. Please try again in a few moments.")		
+		return False
+	
+	print("Check successful!")
+	return True
+	
 
 # TODO: Add a user profile system
 
 
 def main():
 	"""The main method"""
+	if not check_has_valid_key():
+		return
 	attached_image = None
 	ai = AISystem.load_or_create(SAVE_PATH)
 	print(f"{Fore.yellow}Note: It's recommended not to enter any sensitive information.{Style.reset}")

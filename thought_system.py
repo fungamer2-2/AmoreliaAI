@@ -4,7 +4,7 @@ import json
 import time
 from datetime import datetime
 
-from llm import MistralLLM
+from llm import MistralLLM, FallbackMistralLLM
 from const import *
 from utils import (
 	format_memories_to_string,
@@ -24,7 +24,7 @@ class ThoughtSystem:
 		relation_system,
 		personality_system
 	):
-		self.model = MistralLLM()
+		self.model = FallbackMistralLLM()
 		self.config = config
 		self.emotion_system = emotion_system
 		self.memory_system = memory_system
@@ -151,8 +151,9 @@ class ThoughtSystem:
 		appraisal_str = ", ".join(
 			f"{emotion} (Intensity {round(intensity*100)}%)"
 			for emotion, intensity in appraisal
-			if intensity >= 0.1	
+			if intensity >= 0.05	
 		)
+		appraised_emotions = [emotion for emotion, intensity in appraisal if intensity >= 0.05]
 		appraisal_hint = ""
 		if appraisal and appraisal_str:
 			appraisal_hint = f"[This event makes {self.config.name} feel: {appraisal_str}]"
@@ -191,7 +192,7 @@ class ThoughtSystem:
 		for _ in range(5):
 			data = self.model.generate(
 				thought_history,
-				temperature=1.0,
+				temperature=0.8,
 				return_json=True,
 				schema=THOUGHT_SCHEMA
 			)
@@ -221,7 +222,7 @@ class ThoughtSystem:
 			relevant_memories = self.memory_system.long_term.retrieve(thoughts_query, MEMORY_RETRIEVAL_TOP_K)
 			if relevant_memories:
 				added_context = ADDED_CONTEXT_TEMPLATE.format(
-					"\n".join(mem.format_memory() for mem in memories)
+					memories="\n".join(mem.format_memory() for mem in memories)
 				)
 
 			thought_history.append({
@@ -230,7 +231,7 @@ class ThoughtSystem:
 			})
 			new_data = self.model.generate(
 				thought_history,
-				temperature=1.0,
+				temperature=0.8,
 				return_json=True,
 				schema=THOUGHT_SCHEMA
 			)
@@ -251,19 +252,27 @@ class ThoughtSystem:
 			data["thoughts"] = all_thoughts
 			if num_steps >= MAX_THOUGHT_STEPS:
 				break
-
+		
+		for key in list(data["emotion_mult"].keys()):
+			if key in appraised_emotions:
+				data["emotion_mult"][key] = max(0.5, min(1.5, data["emotion_mult"][key]))
+			else:
+				del data["emotion_mult"][key]
+		print(data["emotion_mult"])
 		if not appraisal and data["emotion"] != "Neutral":
-			appraisal = [(data["emotion"], data["emotion_intensity"])]
+			appraisal = [(data["emotion"], data["emotion_intensity"]/10)]
+		
 		
 		total_emotion = Emotion()	
 		for emotion, intensity in appraisal:
+			intensity *= data["emotion_mult"].get(emotion, 1.0)
+			if self.show_thoughts:
+				print(f"{emotion}: {intensity}")
 			total_emotion += self.emotion_system.experience_emotion(emotion, intensity)
 		
-		relation_change = data["relationship_change"]
+		self.emotion_system.clamp_mood()
+		
 		data["emotion"] = appraisal_hint
 		data["emotion_obj"] = total_emotion
-		self.relation_system.change_relationship(
-			relation_change.get("friendliness", 0.0),
-			relation_change.get("dominance", 0.0)
-		)
+		
 		return data

@@ -12,7 +12,7 @@ MISTRAL_API_CHAT_URL = "https://api.mistral.ai/v1/chat/completions"
 MISTRAL_API_EMBED_URL = "https://api.mistral.ai/v1/embeddings"
 
 
-def mistral_request(messages, model, **kwargs):
+def mistral_request(messages, model, max_tries=7, **kwargs):
 	"""Makes a chat completion request to the Mistral AI API"""
 	api_key = os.getenv("MISTRAL_API_KEY")
 	headers = {
@@ -26,19 +26,20 @@ def mistral_request(messages, model, **kwargs):
 		**kwargs
 	}
 	max_delay = 20
-	for tries in range(6):
+	for tries in range(max_tries):
 		response = requests.post(MISTRAL_API_CHAT_URL, json=data, headers=headers, timeout=120)
 		if response.ok:
 			break
 		elif response.status_code == 429:
-			wait_time = min(max_delay, 2 ** (tries + 1))
-			#print(f"Waiting {wait_time} second(s)...")
-			time.sleep(wait_time)
+			if tries < max_tries - 1:
+				wait_time = min(max_delay, 2 ** (tries + 1))
+				#print(f"Waiting {wait_time} second(s)...")
+				time.sleep(wait_time)
 		else:
-			print("An error occured")
+			#print("An error occured")
 			obj = response.json()
 			#print(response.text)
-			print(obj["message"])
+			#print(obj["message"])
 			response.raise_for_status()
 	else:
 		print(response.text)
@@ -60,7 +61,7 @@ def mistral_embed_texts(inputs):
 		"input": inputs
 	}
 	max_delay = 20
-	for tries in range(4):
+	for tries in range(5):
 		response = requests.post(MISTRAL_API_EMBED_URL, json=data, headers=headers, timeout=30)
 		if response.ok:
 			break
@@ -164,4 +165,104 @@ class MistralLLM:
 				return self._parse_json(response)
 	
 		return response
+		
+
+_DEFAULT_FALLBACK_PREF = [
+	"mistral-medium-2508",
+	"mistral-medium-2505",
+	"mistral-small-latest",
+	"mistral-large-2411",	
+]
+		
+class FallbackMistralLLM(MistralLLM):
+	
+	def __init__(self, models=_DEFAULT_FALLBACK_PREF):
+		super().__init__()
+		self.models = models
+
+	def _generate_with_model(
+		self,
+		prompt,
+		model,
+		num_tries,
+		return_json=False,
+		schema=None,
+		n=None,
+		**kwargs
+	):
+		"""Generates a response to the prompt by calling the API."""
+		if schema and not return_json:
+			raise ValueError("return_json must be True if schema is provided")
+		if isinstance(prompt, str):
+			prompt = [{"role":"user", "content":prompt}]
+		
+		if self.model not in [
+			"mistral-small-latest",
+			"mistral-medium-latest",
+			"mistral-large-latest"
+		]:
+			prompt = _convert_system_to_user(prompt)
+
+		if schema:
+			format = {
+				"type":"json_schema",
+				"json_schema":{
+					"name": "json_object",
+					"schema": schema,
+					"strict": True
+				}
+			}
+		else:
+			format = {"type":"json_object"} if return_json else {"type":"text"}
+		response = mistral_request(
+			prompt,
+			**kwargs,
+			n=(n or 1),
+			model=model,
+			response_format=format
+		)
+		#print(response)
+		if n:
+			response = [r["message"]["content"] for r in response["choices"]]
+			if return_json:
+				return [self._parse_json(r) for r in response]
+		else:
+			response = response["choices"][0]["message"]["content"]
 			
+			if return_json:
+				return self._parse_json(response)
+
+		return response
+
+	def generate(
+		self,
+		prompt,
+		return_json=False,
+		schema=None,
+		n=None,
+		**kwargs
+	):
+		for model in self.models:
+			try:
+				#print(f"Trying model {model}...")
+				response = self._generate_with_model(
+					prompt,
+					model,
+					num_tries=3,
+					return_json=return_json,
+					schema=schema,
+					n=n,
+					**kwargs
+				)
+			except requests.HTTPError as e:
+				if e.response.status_code != 429:
+					raise
+			else:
+				return response
+
+		raise RuntimeError("All models failed")
+
+
+if __name__ == "__main__":
+	model = FallbackMistralLLM()
+	print(model.generate("Hello! What can you do?"))

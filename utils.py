@@ -28,11 +28,15 @@ def num_to_str_sign(val, num_dec):
 def val_to_symbol_color(val, maxsize, color_pos="", color_neg="", val_scale=1.0):
 	bars = round(abs(val / val_scale) * maxsize)
 	if bars == 0:
-		return "="
+		return "|" + " "*maxsize + "|"
 	if val >= 0:
-		return color_pos + "+"*bars + Style.reset
+		color = color_pos
+		bars = "+"*bars
 	else:
-		return color_neg + "-"*bars + Style.reset
+		color = color_neg
+		bars = "-"*bars
+
+	return "|" + color + bars.ljust(maxsize) + Style.reset + "|"
 
 
 def get_approx_time_ago_str(timedelta):

@@ -89,7 +89,7 @@ class Memory:
 
 	def reinforce(self):
 		"""Reinforces the memory when it is recalled"""
-		self.strength += 1
+		self.strength += 0.5
 		self.last_accessed = datetime.now()
 
 	def format_memory(self):
